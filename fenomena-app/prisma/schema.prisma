@@ -1,0 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phenomena Phenomenon[]
+
+  @@map("users")
+}
+
+model SurveyCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  phenomena Phenomenon[]
+
+  @@map("survey_categories")
+}
+
+model SurveyPeriod {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phenomena Phenomenon[]
+
+  @@map("survey_periods")
+}
+
+model Phenomenon {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   SurveyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  periodId   String
+  period     SurveyPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  analysisResults AnalysisResult[]
+
+  @@map("phenomena")
+}
+
+model AnalysisResult {
+  id           String      @id @default(cuid())
+  analysisType AnalysisType
+  results      Json
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  phenomenonId String
+  phenomenon   Phenomenon @relation(fields: [phenomenonId], references: [id], onDelete: Cascade)
+
+  @@map("analysis_results")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AnalysisType {
+  DESCRIPTIVE_STATS
+  TREND_ANALYSIS
+  CONTENT_ANALYSIS
+  THEMATIC_ANALYSIS
+  CORRELATION_ANALYSIS
+}

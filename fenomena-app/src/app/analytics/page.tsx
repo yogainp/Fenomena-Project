@@ -1,0 +1,510 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer,
+  AreaChart,
+  Area
+} from 'recharts';
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+interface TextAnalysisData {
+  totalPhenomena: number;
+  topKeywords: Array<{
+    word: string;
+    count: number;
+  }>;
+  sentimentAnalysis: Array<{
+    name: string;
+    value: number;
+  }>;
+  categoryAnalysis: { [category: string]: Array<{ word: string; count: number }> };
+  avgDescriptionLength: number;
+  wordCloudData: Array<{
+    text: string;
+    value: number;
+  }>;
+  totalUniqueWords: number;
+}
+
+export default function AnalyticsPage() {
+  const [overviewData, setOverviewData] = useState<any>(null);
+  const [textAnalysisData, setTextAnalysisData] = useState<TextAnalysisData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'text' | 'trends'>('overview');
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const [overviewRes, textAnalysisRes] = await Promise.all([
+        fetch('/api/analytics/simple-overview'),
+        fetch('/api/analytics/text-analysis'),
+      ]);
+
+      if (overviewRes.ok) {
+        const result = await overviewRes.json();
+        setOverviewData(result);
+      } else {
+        const errorData = await overviewRes.json();
+        console.error('Overview API error:', errorData);
+      }
+
+      if (textAnalysisRes.ok) {
+        const result = await textAnalysisRes.json();
+        setTextAnalysisData(result);
+      } else {
+        const errorData = await textAnalysisRes.json();
+        console.error('Text analysis API error:', errorData);
+      }
+
+      if (!overviewRes.ok && !textAnalysisRes.ok) {
+        setError('Failed to load analytics data');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Back to Dashboard
+                </Link>
+                <h1 className="ml-4 text-xl font-semibold">Analisis & Visualisasi Fenomena</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">Loading analytics...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Back to Dashboard
+                </Link>
+                <h1 className="ml-4 text-xl font-semibold">Analisis & Visualisasi Fenomena</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            {error}
+            <button 
+              onClick={fetchData}
+              className="ml-4 bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!overviewData && !textAnalysisData) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Back to Dashboard
+                </Link>
+                <h1 className="ml-4 text-xl font-semibold">Analisis & Visualisasi Fenomena</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">No data available</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                ← Back to Dashboard
+              </Link>
+              <h1 className="ml-4 text-xl font-semibold">Analisis & Visualisasi Fenomena</h1>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`py-4 px-6 border-b-2 font-medium text-sm ${
+                  activeTab === 'overview'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📊 Statistik Umum
+              </button>
+              <button
+                onClick={() => setActiveTab('text')}
+                className={`py-4 px-6 border-b-2 font-medium text-sm ${
+                  activeTab === 'text'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📝 Analisis Teks
+              </button>
+              <button
+                onClick={() => setActiveTab('trends')}
+                className={`py-4 px-6 border-b-2 font-medium text-sm ${
+                  activeTab === 'trends'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                📈 Tren & Pola
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && overviewData && (
+          <div>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <div className="bg-white p-6 rounded-lg shadow">
+            <div className="text-2xl font-bold text-blue-600">
+              {overviewData.overview?.totalPhenomena || 0}
+            </div>
+            <div className="text-gray-600">Total Fenomena</div>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <div className="text-2xl font-bold text-green-600">
+              {overviewData.overview?.totalCategories || 0}
+            </div>
+            <div className="text-gray-600">Kategori Survei</div>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <div className="text-2xl font-bold text-purple-600">
+              {overviewData.overview?.totalPeriods || 0}
+            </div>
+            <div className="text-gray-600">Periode Survei</div>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <div className="text-2xl font-bold text-orange-600">
+              {overviewData.overview?.totalUsers || 0}
+            </div>
+            <div className="text-gray-600">Total Pengguna</div>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Category Distribution */}
+          {overviewData.categoryAnalysis && overviewData.categoryAnalysis.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Kategori</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={overviewData.categoryAnalysis}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0088FE" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Period Distribution */}
+          {overviewData.periodAnalysis && overviewData.periodAnalysis.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Periode</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={overviewData.periodAnalysis}
+                    dataKey="count"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {overviewData.periodAnalysis.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* User Contributions */}
+        {overviewData.userContributions && overviewData.userContributions.length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow mb-6">
+            <h3 className="text-lg font-semibold mb-4">Top Kontributor Fenomena</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={overviewData.userContributions} layout="horizontal">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="username" type="category" width={100} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#00C49F" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Monthly Trend */}
+        {overviewData.monthlyTrend && overviewData.monthlyTrend.length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h3 className="text-lg font-semibold mb-4">Trend Fenomena per Bulan</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={overviewData.monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="count" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Debug Info */}
+        <div className="bg-gray-100 p-4 rounded-lg text-xs">
+          <details>
+            <summary>Debug Info (click to expand)</summary>
+            <pre className="mt-2">{JSON.stringify(overviewData, null, 2)}</pre>
+          </details>
+        </div>
+        </div>
+        )}
+
+        {/* Text Analysis Tab */}
+        {activeTab === 'text' && textAnalysisData && (
+          <div className="space-y-6">
+            {/* Text Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="text-2xl font-bold text-blue-600">
+                  {textAnalysisData.totalUniqueWords}
+                </div>
+                <div className="text-gray-600">Kata Unik</div>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="text-2xl font-bold text-green-600">
+                  {textAnalysisData.avgDescriptionLength}
+                </div>
+                <div className="text-gray-600">Rata-rata Panjang Deskripsi</div>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="text-2xl font-bold text-purple-600">
+                  {textAnalysisData.topKeywords.length}
+                </div>
+                <div className="text-gray-600">Kata Kunci Teridentifikasi</div>
+              </div>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Top Keywords */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Kata Kunci Paling Sering</h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={textAnalysisData.topKeywords.slice(0, 15)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="word" angle={-45} textAnchor="end" height={100} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#FFBB28" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Sentiment Analysis */}
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Analisis Sentimen Fenomena</h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <PieChart>
+                    <Pie
+                      data={textAnalysisData.sentimentAnalysis}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      fill="#8884d8"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                    >
+                      {textAnalysisData.sentimentAnalysis.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={
+                            entry.name === 'Positif' ? '#00C49F' :
+                            entry.name === 'Negatif' ? '#FF8042' : 
+                            '#FFBB28'
+                          } 
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Category Keywords */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Kata Kunci per Kategori Survei</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Object.entries(textAnalysisData.categoryAnalysis).map(([category, keywords]) => (
+                  <div key={category} className="border border-gray-200 rounded p-4">
+                    <h4 className="font-medium mb-3 text-blue-600">{category}</h4>
+                    <div className="space-y-2">
+                      {keywords.slice(0, 8).map((keyword, index) => (
+                        <div key={keyword.word} className="flex justify-between items-center">
+                          <span className="text-sm">{keyword.word}</span>
+                          <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            {keyword.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trends Tab */}
+        {activeTab === 'trends' && overviewData && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Tren Fenomena Bulanan</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <AreaChart data={overviewData.monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Area 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="#8884d8" 
+                    fill="#8884d8" 
+                    fillOpacity={0.3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Prediksi Tren</h3>
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded">
+                    <h4 className="font-medium text-blue-800">Kategori Berkembang</h4>
+                    <p className="text-sm text-blue-600 mt-1">
+                      {overviewData.categoryAnalysis?.sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A'}
+                      menunjukkan fenomena paling banyak
+                    </p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded">
+                    <h4 className="font-medium text-green-800">Periode Aktif</h4>
+                    <p className="text-sm text-green-600 mt-1">
+                      {overviewData.periodAnalysis?.sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A'}
+                      periode dengan aktivitas tertinggi
+                    </p>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded">
+                    <h4 className="font-medium text-purple-800">User Engagement</h4>
+                    <p className="text-sm text-purple-600 mt-1">
+                      {overviewData.userContributions?.length || 0} pengguna aktif berkontribusi
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Insights & Rekomendasi</h3>
+                <div className="space-y-4">
+                  <div className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-medium">🎯 Fokus Analisis</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Perbanyak analisis pada kategori survei yang menunjukkan fenomena kompleks
+                    </p>
+                  </div>
+                  <div className="border-l-4 border-green-500 pl-4">
+                    <h4 className="font-medium">📈 Potensi Eksplorasi</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Kembangkan analisis lintas kategori untuk menemukan pola tersembunyi
+                    </p>
+                  </div>
+                  <div className="border-l-4 border-yellow-500 pl-4">
+                    <h4 className="font-medium">⚡ Optimalisasi</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Tingkatkan partisipasi user dalam input fenomena untuk data yang lebih kaya
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
