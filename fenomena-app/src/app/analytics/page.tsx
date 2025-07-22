@@ -430,26 +430,36 @@ export default function AnalyticsPage() {
         )}
 
         {/* Trends Tab */}
-        {activeTab === 'trends' && overviewData && (
+        {activeTab === 'trends' && (
+          overviewData ? (
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold mb-4">Tren Fenomena Bulanan</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={overviewData.monthlyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area 
-                    type="monotone" 
-                    dataKey="count" 
-                    stroke="#8884d8" 
-                    fill="#8884d8" 
-                    fillOpacity={0.3}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {overviewData.monthlyTrend && overviewData.monthlyTrend.length > 0 ? (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Tren Fenomena Bulanan</h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={overviewData.monthlyTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Area 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke="#8884d8" 
+                      fill="#8884d8" 
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">Tren Fenomena Bulanan</h3>
+                <div className="text-center text-gray-500 py-12">
+                  Tidak ada data trend tersedia
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-lg shadow">
@@ -458,14 +468,14 @@ export default function AnalyticsPage() {
                   <div className="p-4 bg-blue-50 rounded">
                     <h4 className="font-medium text-blue-800">Kategori Berkembang</h4>
                     <p className="text-sm text-blue-600 mt-1">
-                      {overviewData.categoryAnalysis?.sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A'}
+                      {overviewData.categoryAnalysis ? [...overviewData.categoryAnalysis].sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A' : 'N/A'} 
                       menunjukkan fenomena paling banyak
                     </p>
                   </div>
                   <div className="p-4 bg-green-50 rounded">
                     <h4 className="font-medium text-green-800">Periode Aktif</h4>
                     <p className="text-sm text-green-600 mt-1">
-                      {overviewData.periodAnalysis?.sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A'}
+                      {overviewData.periodAnalysis ? [...overviewData.periodAnalysis].sort((a: any, b: any) => b.count - a.count)[0]?.name || 'N/A' : 'N/A'} 
                       periode dengan aktivitas tertinggi
                     </p>
                   </div>
@@ -503,6 +513,21 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </div>
+          ) : (
+            <div className="bg-white p-12 rounded-lg shadow text-center">
+              <div className="text-gray-500">
+                {loading ? 'Loading trend data...' : 'No trend data available'}
+              </div>
+              {!loading && (
+                <button 
+                  onClick={fetchData}
+                  className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Retry Loading Data
+                </button>
+              )}
+            </div>
+          )
         )}
       </div>
     </div>
