@@ -17,16 +17,33 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // This is a placeholder - in a real app, you'd get user info from context or API
-    // For now, we'll just simulate having user data
-    setUser({
-      id: '1',
-      email: 'user@example.com',
-      username: 'testuser',
-      role: 'USER'
-    });
-    setLoading(false);
+    fetchUserData();
   }, []);
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/profile');
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          username: userData.username,
+          role: userData.role
+        });
+      } else {
+        // If profile fetch fails, redirect to login
+        router.push('/login');
+      }
+    } catch (error) {
+      console.error('Failed to fetch user data:', error);
+      router.push('/login');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -59,6 +76,18 @@ export default function DashboardPage() {
               <span className="text-sm text-gray-700">
                 Welcome, {user?.username} ({user?.role})
               </span>
+              {user?.role === 'ADMIN' && (
+                <Link href="/admin/users">
+                  <button className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700">
+                    User Management
+                  </button>
+                </Link>
+              )}
+              <Link href="/profile">
+                <button className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                  Profile
+                </button>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
@@ -135,7 +164,7 @@ export default function DashboardPage() {
                     Panel Admin
                   </h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    Kelola kategori survei, periode survei, dan pengaturan sistem
+                    Kelola kategori survei, periode survei, pengguna, dan pengaturan sistem
                   </p>
                   <div className="mt-4 space-x-4">
                     <Link href="/admin/categories">
@@ -146,6 +175,11 @@ export default function DashboardPage() {
                     <button className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
                       Kelola Periode
                     </button>
+                    <Link href="/admin/users">
+                      <button className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
+                        Kelola Pengguna
+                      </button>
+                    </Link>
                   </div>
                 </div>
               </div>
