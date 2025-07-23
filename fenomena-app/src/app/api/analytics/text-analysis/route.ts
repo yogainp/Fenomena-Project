@@ -7,14 +7,36 @@ export async function GET(request: NextRequest) {
     const user = requireAuth(request);
     console.log('Text analysis request by user:', user.userId);
 
-    // Get all phenomena texts for analysis
+    // Get query parameters for filtering
+    const { searchParams } = new URL(request.url);
+    const categoryId = searchParams.get('categoryId');
+    const periodId = searchParams.get('periodId');
+
+    // Build filter conditions
+    const whereConditions: any = {};
+    if (categoryId && categoryId !== 'all') {
+      whereConditions.categoryId = categoryId;
+    }
+    if (periodId && periodId !== 'all') {
+      whereConditions.periodId = periodId;
+    }
+
+    // Get phenomena texts for analysis with optional filtering
     const phenomena = await prisma.phenomenon.findMany({
+      where: whereConditions,
       select: {
         id: true,
         title: true,
         description: true,
         category: {
           select: {
+            id: true,
+            name: true,
+          },
+        },
+        period: {
+          select: {
+            id: true,
             name: true,
           },
         },
@@ -66,10 +88,49 @@ export async function GET(request: NextRequest) {
       return 'neutral';
     }
 
+    function analyzeProximityWords(text: string, windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
+      const targetKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh'];
+      const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+      const words = cleanText.split(/\s+/).filter(word => word.length > 2);
+      const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
+      
+      const result: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
+      
+      targetKeywords.forEach(keyword => {
+        result[keyword] = { proximityWords: {}, totalOccurrences: 0 };
+        
+        for (let i = 0; i < words.length; i++) {
+          if (words[i].includes(keyword) || keyword.includes(words[i])) {
+            result[keyword].totalOccurrences++;
+            
+            // Analyze words within the window
+            const start = Math.max(0, i - windowSize);
+            const end = Math.min(words.length, i + windowSize + 1);
+            
+            for (let j = start; j < end; j++) {
+              if (j !== i && words[j].length > 3 && !stopWords.includes(words[j]) && !words[j].match(/^\d+$/)) {
+                const proximityWord = words[j];
+                result[keyword].proximityWords[proximityWord] = (result[keyword].proximityWords[proximityWord] || 0) + 1;
+              }
+            }
+          }
+        }
+      });
+      
+      return result;
+    }
+
     // Analyze all phenomena texts
     let allWords: string[] = [];
     const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
     const categoryKeywords: { [category: string]: string[] } = {};
+    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {
+      'peningkatan': { proximityWords: {}, totalOccurrences: 0 },
+      'penurunan': { proximityWords: {}, totalOccurrences: 0 },
+      'naik': { proximityWords: {}, totalOccurrences: 0 },
+      'turun': { proximityWords: {}, totalOccurrences: 0 },
+      'tumbuh': { proximityWords: {}, totalOccurrences: 0 }
+    };
 
     phenomena.forEach(phenomenon => {
       const combinedText = `${phenomenon.title} ${phenomenon.description}`;
@@ -87,6 +148,16 @@ export async function GET(request: NextRequest) {
         categoryKeywords[categoryName] = [];
       }
       categoryKeywords[categoryName] = categoryKeywords[categoryName].concat(words);
+      
+      // Proximity analysis
+      const proximityResults = analyzeProximityWords(combinedText);
+      Object.keys(proximityResults).forEach(keyword => {
+        proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
+        Object.keys(proximityResults[keyword].proximityWords).forEach(word => {
+          proximityAnalysisResults[keyword].proximityWords[word] = 
+            (proximityAnalysisResults[keyword].proximityWords[word] || 0) + proximityResults[keyword].proximityWords[word];
+        });
+      });
     });
 
     // Get overall word frequency
@@ -115,6 +186,22 @@ export async function GET(request: NextRequest) {
       .slice(0, 50)
       .map(([text, value]) => ({ text, value }));
 
+    // Process proximity analysis results
+    const proximityAnalysis: { [keyword: string]: { keyword: string, occurrences: number, topProximityWords: { word: string, count: number }[] } } = {};
+    Object.keys(proximityAnalysisResults).forEach(keyword => {
+      const data = proximityAnalysisResults[keyword];
+      const topProximityWords = Object.entries(data.proximityWords)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([word, count]) => ({ word, count }));
+      
+      proximityAnalysis[keyword] = {
+        keyword,
+        occurrences: data.totalOccurrences,
+        topProximityWords
+      };
+    });
+
     return NextResponse.json({
       totalPhenomena: phenomena.length,
       topKeywords,
@@ -127,6 +214,12 @@ export async function GET(request: NextRequest) {
       avgDescriptionLength: Math.round(avgDescriptionLength),
       wordCloudData,
       totalUniqueWords: Object.keys(wordFrequency).length,
+      proximityAnalysis,
+      filterInfo: {
+        categoryId: categoryId || 'all',
+        periodId: periodId || 'all',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(periodId && periodId !== 'all')
+      },
     });
 
   } catch (error: any) {

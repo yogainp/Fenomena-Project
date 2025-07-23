@@ -36,6 +36,18 @@ interface TextAnalysisData {
     value: number;
   }>;
   totalUniqueWords: number;
+  proximityAnalysis: { 
+    [keyword: string]: { 
+      keyword: string; 
+      occurrences: number; 
+      topProximityWords: Array<{ word: string; count: number }> 
+    } 
+  };
+  filterInfo: {
+    categoryId: string;
+    periodId: string;
+    isFiltered: boolean;
+  };
 }
 
 export default function AnalyticsPage() {
@@ -44,10 +56,41 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'text' | 'trends'>('overview');
+  
+  // Filter states for text analysis
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [textAnalysisLoading, setTextAnalysisLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  const fetchTextAnalysis = async (categoryId: string = 'all', periodId: string = 'all') => {
+    try {
+      setTextAnalysisLoading(true);
+      const params = new URLSearchParams();
+      if (categoryId !== 'all') params.append('categoryId', categoryId);
+      if (periodId !== 'all') params.append('periodId', periodId);
+      
+      const url = `/api/analytics/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const result = await response.json();
+        setTextAnalysisData(result);
+      } else {
+        const errorData = await response.json();
+        console.error('Text analysis API error:', errorData);
+        setError('Failed to load text analysis data');
+      }
+    } catch (err) {
+      console.error('Text analysis fetch error:', err);
+      setError('Network error loading text analysis.');
+    } finally {
+      setTextAnalysisLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -84,6 +127,22 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    fetchTextAnalysis(categoryId, selectedPeriod);
+  };
+
+  const handlePeriodChange = (periodId: string) => {
+    setSelectedPeriod(periodId);
+    fetchTextAnalysis(selectedCategory, periodId);
+  };
+
+  const resetFilters = () => {
+    setSelectedCategory('all');
+    setSelectedPeriod('all');
+    fetchTextAnalysis('all', 'all');
   };
 
   if (loading) {
@@ -333,10 +392,77 @@ export default function AnalyticsPage() {
         )}
 
         {/* Text Analysis Tab */}
-        {activeTab === 'text' && textAnalysisData && (
+        {activeTab === 'text' && textAnalysisData && overviewData && (
           <div className="space-y-6">
+            {/* Filter Section */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-700 mb-2">Filter Kategori:</label>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                      disabled={textAnalysisLoading}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">Semua Kategori</option>
+                      {overviewData.categoryAnalysis?.map((category: any) => (
+                        <option key={category.categoryId} value={category.categoryId}>
+                          {category.name} ({category.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-700 mb-2">Filter Periode:</label>
+                    <select
+                      value={selectedPeriod}
+                      onChange={(e) => handlePeriodChange(e.target.value)}
+                      disabled={textAnalysisLoading}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">Semua Periode</option>
+                      {overviewData.periodAnalysis?.map((period: any) => (
+                        <option key={period.periodId} value={period.periodId}>
+                          {period.name} ({period.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(selectedCategory !== 'all' || selectedPeriod !== 'all') && (
+                    <button
+                      onClick={resetFilters}
+                      disabled={textAnalysisLoading}
+                      className="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600 disabled:opacity-50"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                  {textAnalysisLoading && (
+                    <div className="text-sm text-blue-600">Loading...</div>
+                  )}
+                  {textAnalysisData.filterInfo?.isFiltered && (
+                    <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      Data Terfilter
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Text Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <div className="text-2xl font-bold text-orange-600">
+                  {textAnalysisData.totalPhenomena}
+                </div>
+                <div className="text-gray-600">
+                  {textAnalysisData.filterInfo?.isFiltered ? 'Fenomena Terfilter' : 'Total Fenomena'}
+                </div>
+              </div>
               <div className="bg-white p-6 rounded-lg shadow">
                 <div className="text-2xl font-bold text-blue-600">
                   {textAnalysisData.totalUniqueWords}
@@ -426,6 +552,50 @@ export default function AnalyticsPage() {
                 ))}
               </div>
             </div>
+
+            {/* Proximity Analysis */}
+            {textAnalysisData.proximityAnalysis && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">🔍 Analisis Kata Berdekatan</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Analisis kata-kata yang sering muncul di sekitar kata kunci perubahan: peningkatan, penurunan, naik, turun, tumbuh
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Object.entries(textAnalysisData.proximityAnalysis)
+                    .filter(([_, data]) => data.occurrences > 0)
+                    .map(([keyword, data]) => (
+                    <div key={keyword} className="border border-gray-200 rounded p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-blue-600 capitalize">{keyword}</h4>
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {data.occurrences} kali
+                        </span>
+                      </div>
+                      {data.topProximityWords.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-xs text-gray-500 mb-2">Kata-kata berdekatan:</div>
+                          {data.topProximityWords.slice(0, 8).map((word, index) => (
+                            <div key={word.word} className="flex justify-between items-center">
+                              <span className="text-sm">{word.word}</span>
+                              <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                {word.count}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400">Tidak ada kata berdekatan ditemukan</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {Object.values(textAnalysisData.proximityAnalysis).every(data => data.occurrences === 0) && (
+                  <div className="text-center text-gray-500 py-8">
+                    Tidak ditemukan kata kunci perubahan dalam data fenomena
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
