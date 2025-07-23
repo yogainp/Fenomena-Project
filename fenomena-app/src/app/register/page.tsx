@@ -1,8 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+interface Region {
+  id: string;
+  province: string;
+  city: string;
+  regionCode: string;
+}
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -10,11 +17,36 @@ export default function RegisterPage() {
     username: '',
     password: '',
     confirmPassword: '',
+    regionId: '',
     role: 'USER' as 'USER' | 'ADMIN',
   });
+  const [regions, setRegions] = useState<Region[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [regionsLoading, setRegionsLoading] = useState(true);
   const router = useRouter();
+
+  useEffect(() => {
+    fetchRegions();
+  }, []);
+
+  const fetchRegions = async () => {
+    try {
+      setRegionsLoading(true);
+      const response = await fetch('/api/regions');
+      
+      if (response.ok) {
+        const data = await response.json();
+        setRegions(data.regions);
+      } else {
+        console.error('Failed to fetch regions');
+      }
+    } catch (error) {
+      console.error('Error fetching regions:', error);
+    } finally {
+      setRegionsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +54,11 @@ export default function RegisterPage() {
 
     if (formData.password !== formData.confirmPassword) {
       setError('Password tidak cocok');
+      return;
+    }
+
+    if (!formData.regionId) {
+      setError('Silakan pilih wilayah');
       return;
     }
 
@@ -37,6 +74,7 @@ export default function RegisterPage() {
           email: formData.email,
           username: formData.username,
           password: formData.password,
+          regionId: formData.regionId,
           role: formData.role,
         }),
       });
@@ -114,6 +152,35 @@ export default function RegisterPage() {
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Masukkan username"
               />
+            </div>
+            <div>
+              <label htmlFor="regionId" className="block text-sm font-medium text-gray-700">
+                Wilayah <span className="text-red-500">*</span>
+              </label>
+              {regionsLoading ? (
+                <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100">
+                  Loading regions...
+                </div>
+              ) : (
+                <select
+                  id="regionId"
+                  name="regionId"
+                  value={formData.regionId}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Pilih wilayah tempat Anda bertugas</option>
+                  {regions.map((region) => (
+                    <option key={region.id} value={region.id}>
+                      {region.city} - {region.province} ({region.regionCode})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Anda hanya dapat menginput fenomena di wilayah yang dipilih
+              </p>
             </div>
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-gray-700">

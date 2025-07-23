@@ -1,0 +1,118 @@
+● 📊 Struktur Tabel Database Kategori dan Periode Survei
+
+  Berdasarkan Prisma schema dan implementasi yang ada, berikut struktur lengkapnya:
+
+  🏷️  1. Tabel SurveyCategory (survey_categories)
+
+  Schema Prisma:
+  model SurveyCategory {
+    id          String   @id @default(cuid())
+    name        String   @unique
+    description String?
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    phenomena Phenomenon[]
+    @@map("survey_categories")
+  }
+
+  Struktur Fields:
+  - id: Primary key (CUID) - Auto-generated
+  - name: Nama kategori (String, UNIQUE, Required)
+  - description: Deskripsi kategori (String, Optional)
+  - createdAt: Timestamp pembuatan (Auto-generated)
+  - updatedAt: Timestamp update terakhir (Auto-updated)
+  - phenomena: Relasi One-to-Many ke tabel Phenomenon
+
+  Contoh Data:
+  {
+    "id": "clx1a2b3c4d5e6f7g8h9i0j1",
+    "name": "Ekonomi",
+    "description": "Kategori fenomena terkait ekonomi dan bisnis",
+    "createdAt": "2024-01-15T08:30:00Z",
+    "updatedAt": "2024-01-15T08:30:00Z"
+  }
+
+  📅 2. Tabel SurveyPeriod (survey_periods)
+
+  Schema Prisma:
+  model SurveyPeriod {
+    id        String   @id @default(cuid())
+    name      String   @unique
+    startDate DateTime
+    endDate   DateTime
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    phenomena Phenomenon[]
+    @@map("survey_periods")
+  }
+
+  Struktur Fields:
+  - id: Primary key (CUID) - Auto-generated
+  - name: Nama periode (String, UNIQUE, Required)
+  - startDate: Tanggal mulai periode (DateTime, Required)
+  - endDate: Tanggal akhir periode (DateTime, Required)
+  - createdAt: Timestamp pembuatan (Auto-generated)
+  - updatedAt: Timestamp update terakhir (Auto-updated)
+  - phenomena: Relasi One-to-Many ke tabel Phenomenon
+
+  Contoh Data:
+  {
+    "id": "clx2b3c4d5e6f7g8h9i0j1k2",
+    "name": "Q1 2024",
+    "startDate": "2024-01-01T00:00:00Z",
+    "endDate": "2024-03-31T23:59:59Z",
+    "createdAt": "2024-01-01T08:00:00Z",
+    "updatedAt": "2024-01-01T08:00:00Z"
+  }
+
+  🔗 3. Relasi dengan Tabel Phenomenon
+
+  Kedua tabel ini berelasi dengan tabel Phenomenon:
+
+  model Phenomenon {
+    // ... other fields
+
+    categoryId String
+    category   SurveyCategory @relation(fields: [categoryId], references: [id],
+  onDelete: Cascade)
+
+    periodId   String
+    period     SurveyPeriod   @relation(fields: [periodId], references: [id], onDelete:      
+  Cascade)
+  }
+
+  Constraint:
+  - Cascade Delete: Jika kategori/periode dihapus, semua fenomena terkait akan ikut
+  terhapus
+  - Foreign Key: categoryId dan periodId harus referensi ke ID yang valid
+
+  🛠️  4. API Validation (Zod Schema)
+
+  Category Validation:
+  const categorySchema = z.object({
+    name: z.string().min(1, 'Name is required'),
+    description: z.string().optional(),
+  });
+
+  Period Validation:
+  const periodSchema = z.object({
+    name: z.string().min(1, 'Name is required'),
+    startDate: z.string().refine((date) => !isNaN(Date.parse(date))),
+    endDate: z.string().refine((date) => !isNaN(Date.parse(date))),
+  }).refine((data) => new Date(data.startDate) < new Date(data.endDate));
+
+  📈 5. Response API Include Count
+
+  API mengembalikan data dengan jumlah phenomena:
+  {
+    "id": "...",
+    "name": "Ekonomi",
+    "description": "...",
+    "createdAt": "...",
+    "updatedAt": "...",
+    "_count": {
+      "phenomena": 15
+    }
+  }

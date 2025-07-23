@@ -7,6 +7,7 @@ import { z } from 'zod';
 const updateProfileSchema = z.object({
   email: z.string().email('Invalid email format').optional(),
   username: z.string().min(3, 'Username must be at least 3 characters').optional(),
+  regionId: z.string().optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(6, 'New password must be at least 6 characters').optional(),
 }).refine(
@@ -37,6 +38,15 @@ export async function GET(request: NextRequest) {
         role: true,
         createdAt: true,
         updatedAt: true,
+        regionId: true,
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
         _count: {
           select: {
             phenomena: true,
@@ -79,7 +89,7 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { email, username, currentPassword, newPassword } = validationResult.data;
+    const { email, username, regionId, currentPassword, newPassword } = validationResult.data;
 
     // Get current user data
     const currentUser = await prisma.user.findUnique({
@@ -126,6 +136,7 @@ export async function PUT(request: NextRequest) {
     
     if (email) dataToUpdate.email = email;
     if (username) dataToUpdate.username = username;
+    if (regionId !== undefined) dataToUpdate.regionId = regionId || null;
 
     // Handle password change
     if (newPassword && currentPassword) {
@@ -152,6 +163,15 @@ export async function PUT(request: NextRequest) {
         role: true,
         createdAt: true,
         updatedAt: true,
+        regionId: true,
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
         _count: {
           select: {
             phenomena: true,

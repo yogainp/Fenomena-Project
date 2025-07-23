@@ -37,7 +37,8 @@ export async function createUser(
   email: string,
   username: string,
   password: string,
-  role: 'ADMIN' | 'USER' = 'USER'
+  role: 'ADMIN' | 'USER' = 'USER',
+  regionId?: string
 ) {
   const hashedPassword = await hashPassword(password);
   
@@ -47,12 +48,22 @@ export async function createUser(
       username,
       password: hashedPassword,
       role,
+      regionId,
     },
     select: {
       id: true,
       email: true,
       username: true,
       role: true,
+      regionId: true,
+      region: {
+        select: {
+          id: true,
+          province: true,
+          city: true,
+          regionCode: true,
+        },
+      },
       createdAt: true,
     },
   });

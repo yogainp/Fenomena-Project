@@ -12,8 +12,9 @@ export async function GET(request: NextRequest) {
     const totalCategories = await prisma.surveyCategory.count();
     const totalPeriods = await prisma.surveyPeriod.count();
     const totalUsers = await prisma.user.count();
+    const totalRegions = await prisma.region.count();
 
-    console.log('Basic counts:', { totalPhenomena, totalCategories, totalPeriods, totalUsers });
+    console.log('Basic counts:', { totalPhenomena, totalCategories, totalPeriods, totalUsers, totalRegions });
 
     // Get category distribution
     const categoryData = await prisma.surveyCategory.findMany({
@@ -72,6 +73,25 @@ export async function GET(request: NextRequest) {
       count: user._count.phenomena,
     }));
 
+    // Get region distribution
+    const regionData = await prisma.region.findMany({
+      include: {
+        _count: {
+          select: {
+            phenomena: true,
+          },
+        },
+      },
+    });
+
+    const regionAnalysis = regionData.map(region => ({
+      regionId: region.id,
+      province: region.province,
+      city: region.city,
+      regionCode: region.regionCode,
+      count: region._count.phenomena,
+    }));
+
     // Simple monthly trend - get phenomena with dates
     const phenomenaWithDates = await prisma.phenomenon.findMany({
       select: {
@@ -96,9 +116,11 @@ export async function GET(request: NextRequest) {
         totalCategories,
         totalPeriods,
         totalUsers,
+        totalRegions,
       },
       categoryAnalysis,
       periodAnalysis,
+      regionAnalysis,
       monthlyTrend,
       userContributions,
     };

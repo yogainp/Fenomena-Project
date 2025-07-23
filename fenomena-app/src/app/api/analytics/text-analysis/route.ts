@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
     const periodId = searchParams.get('periodId');
+    const regionId = searchParams.get('regionId');
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest) {
     }
     if (periodId && periodId !== 'all') {
       whereConditions.periodId = periodId;
+    }
+    if (regionId && regionId !== 'all') {
+      whereConditions.regionId = regionId;
     }
 
     // Get phenomena texts for analysis with optional filtering
@@ -218,7 +222,8 @@ export async function GET(request: NextRequest) {
       filterInfo: {
         categoryId: categoryId || 'all',
         periodId: periodId || 'all',
-        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(periodId && periodId !== 'all')
+        regionId: regionId || 'all',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(periodId && periodId !== 'all') || Boolean(regionId && regionId !== 'all')
       },
     });
 

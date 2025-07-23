@@ -17,6 +17,11 @@ interface Phenomenon {
   period: {
     name: string;
   };
+  region: {
+    province: string;
+    city: string;
+    regionCode: string;
+  };
 }
 
 interface Category {
@@ -32,10 +37,25 @@ interface Period {
   endDate: string;
 }
 
+interface Region {
+  id: string;
+  province: string;
+  city: string;
+  regionCode: string;
+}
+
+interface User {
+  id: string;
+  role: string;
+  regionId?: string;
+}
+
 export default function PhenomenaPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -47,39 +67,35 @@ export default function PhenomenaPage() {
     description: '',
     categoryId: '',
     periodId: '',
+    regionId: '',
   });
   
   // Filter state
   const [filters, setFilters] = useState({
     categoryId: '',
     periodId: '',
+    regionId: '',
     search: '',
   });
 
   useEffect(() => {
-    fetchData();
+    fetchInitialData();
+  }, []);
+
+  useEffect(() => {
+    fetchPhenomena();
   }, [filters]);
 
-  const fetchData = async () => {
+  const fetchInitialData = async () => {
     try {
       setLoading(true);
       
-      // Fetch phenomena with filters
-      const params = new URLSearchParams();
-      if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.periodId) params.append('periodId', filters.periodId);
-      if (filters.search) params.append('search', filters.search);
-      
-      const [phenomenaRes, categoriesRes, periodsRes] = await Promise.all([
-        fetch(`/api/phenomena?${params.toString()}`),
+      const [categoriesRes, periodsRes, regionsRes, userRes] = await Promise.all([
         fetch('/api/categories'),
         fetch('/api/periods'),
+        fetch('/api/regions'),
+        fetch('/api/profile'),
       ]);
-
-      if (phenomenaRes.ok) {
-        const phenomenaData = await phenomenaRes.json();
-        setPhenomena(phenomenaData);
-      }
       
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json();
@@ -90,10 +106,51 @@ export default function PhenomenaPage() {
         const periodsData = await periodsRes.json();
         setPeriods(periodsData);
       }
+      
+      if (regionsRes.ok) {
+        const regionsData = await regionsRes.json();
+        setRegions(regionsData.regions);
+      }
+      
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setCurrentUser({
+          id: userData.id,
+          role: userData.role,
+          regionId: userData.regionId,
+        });
+        
+        // Set default region for non-admin users
+        if (userData.role !== 'ADMIN' && userData.regionId) {
+          setFormData(prev => ({ ...prev, regionId: userData.regionId }));
+        }
+      }
+      
+      await fetchPhenomena();
     } catch (error) {
-      setError('Failed to load data');
+      setError('Failed to load initial data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPhenomena = async () => {
+    try {
+      // Fetch phenomena with filters
+      const params = new URLSearchParams();
+      if (filters.categoryId) params.append('categoryId', filters.categoryId);
+      if (filters.periodId) params.append('periodId', filters.periodId);
+      if (filters.regionId) params.append('regionId', filters.regionId);
+      if (filters.search) params.append('search', filters.search);
+      
+      const phenomenaRes = await fetch(`/api/phenomena?${params.toString()}`);
+
+      if (phenomenaRes.ok) {
+        const phenomenaData = await phenomenaRes.json();
+        setPhenomena(phenomenaData);
+      }
+    } catch (error) {
+      setError('Failed to load phenomena');
     }
   };
 
@@ -118,8 +175,9 @@ export default function PhenomenaPage() {
       if (response.ok) {
         setShowForm(false);
         setEditingId(null);
-        setFormData({ title: '', description: '', categoryId: '', periodId: '' });
-        fetchData();
+        const defaultRegionId = currentUser?.role !== 'ADMIN' && currentUser?.regionId ? currentUser.regionId : '';
+        setFormData({ title: '', description: '', categoryId: '', periodId: '', regionId: defaultRegionId });
+        fetchPhenomena();
       } else {
         setError(data.error || 'Operation failed');
       }
@@ -135,6 +193,7 @@ export default function PhenomenaPage() {
       description: phenomenon.description,
       categoryId: '', // We'll need to fetch this from the API
       periodId: '', // We'll need to fetch this from the API
+      regionId: '', // We'll need to fetch this from the API
     });
     setShowForm(true);
   };
@@ -148,7 +207,7 @@ export default function PhenomenaPage() {
       });
 
       if (response.ok) {
-        fetchData();
+        fetchPhenomena();
       } else {
         const data = await response.json();
         setError(data.error || 'Delete failed');
@@ -197,7 +256,7 @@ export default function PhenomenaPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-4">Filter Fenomena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -228,6 +287,23 @@ export default function PhenomenaPage() {
                 {periods.map((period) => (
                   <option key={period.id} value={period.id}>
                     {period.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Wilayah
+              </label>
+              <select
+                value={filters.regionId}
+                onChange={(e) => setFilters({ ...filters, regionId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="">Semua Wilayah</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.city} - {region.province}
                   </option>
                 ))}
               </select>
@@ -266,9 +342,10 @@ export default function PhenomenaPage() {
                         {phenomenon.title}
                       </h3>
                       <p className="mt-2 text-gray-600">{phenomenon.description}</p>
-                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                         <span>Kategori: {phenomenon.category.name}</span>
                         <span>Periode: {phenomenon.period.name}</span>
+                        <span>Wilayah: {phenomenon.region.city}, {phenomenon.region.province}</span>
                         <span>Oleh: {phenomenon.user.username}</span>
                         <span>
                           {new Date(phenomenon.createdAt).toLocaleDateString('id-ID')}
@@ -365,13 +442,40 @@ export default function PhenomenaPage() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Wilayah <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.regionId}
+                      onChange={(e) => setFormData({ ...formData, regionId: e.target.value })}
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
+                        currentUser?.role !== 'ADMIN' ? 'bg-gray-100' : ''
+                      }`}
+                      required
+                      disabled={currentUser?.role !== 'ADMIN'}
+                    >
+                      <option value="">Pilih Wilayah</option>
+                      {(currentUser?.role === 'ADMIN' ? regions : regions.filter(r => r.id === currentUser?.regionId)).map((region) => (
+                        <option key={region.id} value={region.id}>
+                          {region.city} - {region.province} ({region.regionCode})
+                        </option>
+                      ))}
+                    </select>
+                    {currentUser?.role !== 'ADMIN' && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Anda hanya dapat menginput fenomena di wilayah yang telah ditetapkan
+                      </p>
+                    )}
+                  </div>
                   <div className="flex justify-end space-x-3 pt-4">
                     <button
                       type="button"
                       onClick={() => {
                         setShowForm(false);
                         setEditingId(null);
-                        setFormData({ title: '', description: '', categoryId: '', periodId: '' });
+                        const defaultRegionId = currentUser?.role !== 'ADMIN' && currentUser?.regionId ? currentUser.regionId : '';
+                        setFormData({ title: '', description: '', categoryId: '', periodId: '', regionId: defaultRegionId });
                       }}
                       className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                     >

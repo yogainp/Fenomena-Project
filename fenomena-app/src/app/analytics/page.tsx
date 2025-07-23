@@ -60,18 +60,20 @@ export default function AnalyticsPage() {
   // Filter states for text analysis
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [textAnalysisLoading, setTextAnalysisLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchTextAnalysis = async (categoryId: string = 'all', periodId: string = 'all') => {
+  const fetchTextAnalysis = async (categoryId: string = 'all', periodId: string = 'all', regionId: string = 'all') => {
     try {
       setTextAnalysisLoading(true);
       const params = new URLSearchParams();
       if (categoryId !== 'all') params.append('categoryId', categoryId);
       if (periodId !== 'all') params.append('periodId', periodId);
+      if (regionId !== 'all') params.append('regionId', regionId);
       
       const url = `/api/analytics/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
       const response = await fetch(url);
@@ -131,18 +133,24 @@ export default function AnalyticsPage() {
 
   const handleCategoryChange = (categoryId: string) => {
     setSelectedCategory(categoryId);
-    fetchTextAnalysis(categoryId, selectedPeriod);
+    fetchTextAnalysis(categoryId, selectedPeriod, selectedRegion);
   };
 
   const handlePeriodChange = (periodId: string) => {
     setSelectedPeriod(periodId);
-    fetchTextAnalysis(selectedCategory, periodId);
+    fetchTextAnalysis(selectedCategory, periodId, selectedRegion);
+  };
+
+  const handleRegionChange = (regionId: string) => {
+    setSelectedRegion(regionId);
+    fetchTextAnalysis(selectedCategory, selectedPeriod, regionId);
   };
 
   const resetFilters = () => {
     setSelectedCategory('all');
     setSelectedPeriod('all');
-    fetchTextAnalysis('all', 'all');
+    setSelectedRegion('all');
+    fetchTextAnalysis('all', 'all', 'all');
   };
 
   if (loading) {
@@ -277,7 +285,7 @@ export default function AnalyticsPage() {
         {activeTab === 'overview' && overviewData && (
           <div>
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
           <div className="bg-white p-6 rounded-lg shadow">
             <div className="text-2xl font-bold text-blue-600">
               {overviewData.overview?.totalPhenomena || 0}
@@ -297,6 +305,12 @@ export default function AnalyticsPage() {
             <div className="text-gray-600">Periode Survei</div>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
+            <div className="text-2xl font-bold text-red-600">
+              {overviewData.overview?.totalRegions || 0}
+            </div>
+            <div className="text-gray-600">Total Wilayah</div>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow">
             <div className="text-2xl font-bold text-orange-600">
               {overviewData.overview?.totalUsers || 0}
             </div>
@@ -305,7 +319,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
           {/* Category Distribution */}
           {overviewData.categoryAnalysis && overviewData.categoryAnalysis.length > 0 && (
             <div className="bg-white p-6 rounded-lg shadow">
@@ -344,6 +358,22 @@ export default function AnalyticsPage() {
                   </Pie>
                   <Tooltip />
                 </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Region Distribution */}
+          {overviewData.regionAnalysis && overviewData.regionAnalysis.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Wilayah</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={overviewData.regionAnalysis.slice(0, 8)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="city" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip formatter={([value], [name]) => [value, 'Jumlah Fenomena']} labelFormatter={(label) => `Wilayah: ${label}`} />
+                  <Bar dataKey="count" fill="#FF8042" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           )}
@@ -430,9 +460,25 @@ export default function AnalyticsPage() {
                       ))}
                     </select>
                   </div>
+                  <div className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-700 mb-2">Filter Wilayah:</label>
+                    <select
+                      value={selectedRegion}
+                      onChange={(e) => handleRegionChange(e.target.value)}
+                      disabled={textAnalysisLoading}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">Semua Wilayah</option>
+                      {overviewData.regionAnalysis?.map((region: any) => (
+                        <option key={region.regionId} value={region.regionId}>
+                          {region.city}, {region.province} ({region.count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(selectedCategory !== 'all' || selectedPeriod !== 'all') && (
+                  {(selectedCategory !== 'all' || selectedPeriod !== 'all' || selectedRegion !== 'all') && (
                     <button
                       onClick={resetFilters}
                       disabled={textAnalysisLoading}

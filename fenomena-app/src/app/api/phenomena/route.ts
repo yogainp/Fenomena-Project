@@ -8,6 +8,7 @@ const phenomenonSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   categoryId: z.string().min(1, 'Category is required'),
   periodId: z.string().min(1, 'Period is required'),
+  regionId: z.string().min(1, 'Region is required'),
 });
 
 export async function GET(request: NextRequest) {
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const categoryId = url.searchParams.get('categoryId');
     const periodId = url.searchParams.get('periodId');
+    const regionId = url.searchParams.get('regionId');
     const search = url.searchParams.get('search');
 
     const whereClause: any = {};
@@ -28,6 +30,11 @@ export async function GET(request: NextRequest) {
     // Filter by period if provided
     if (periodId) {
       whereClause.periodId = periodId;
+    }
+
+    // Filter by region if provided
+    if (regionId) {
+      whereClause.regionId = regionId;
     }
 
     // Search in title and description if provided
@@ -56,6 +63,13 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
+        region: {
+          select: {
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -79,6 +93,31 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = phenomenonSchema.parse(body);
 
+    // Get current user's region
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { regionId: true, role: true },
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Enforce region restriction for non-admin users
+    if (currentUser.role !== 'ADMIN') {
+      if (!currentUser.regionId) {
+        return NextResponse.json({ 
+          error: 'You must be assigned to a region to create phenomena. Please contact admin.' 
+        }, { status: 403 });
+      }
+
+      if (validatedData.regionId !== currentUser.regionId) {
+        return NextResponse.json({ 
+          error: 'You can only create phenomena in your assigned region.' 
+        }, { status: 403 });
+      }
+    }
+
     // Verify category exists
     const category = await prisma.surveyCategory.findUnique({
       where: { id: validatedData.categoryId },
@@ -95,6 +134,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Period not found' }, { status: 404 });
     }
 
+    // Verify region exists
+    const region = await prisma.region.findUnique({
+      where: { id: validatedData.regionId },
+    });
+    if (!region) {
+      return NextResponse.json({ error: 'Region not found' }, { status: 404 });
+    }
+
     const phenomenon = await prisma.phenomenon.create({
       data: {
         ...validatedData,
@@ -109,6 +156,13 @@ export async function POST(request: NextRequest) {
         period: {
           select: {
             name: true,
+          },
+        },
+        region: {
+          select: {
+            province: true,
+            city: true,
+            regionCode: true,
           },
         },
       },

@@ -5,7 +5,10 @@
       "Bash(set PGPASSWORD=@bps2020)",
       "Bash(\"C:\\Program Files\\PostgreSQL\\17\\bin\\createdb.exe\" -U postgres -h localhost FenomenaDB)",
       "Bash(npx prisma:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

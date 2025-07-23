@@ -7,6 +7,7 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   username: z.string().min(3, 'Username must be at least 3 characters'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  regionId: z.string().min(1, 'Region is required'),
   role: z.enum(['ADMIN', 'USER']).optional(),
 });
 
@@ -32,11 +33,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify region exists
+    if (validatedData.regionId) {
+      const region = await prisma.region.findUnique({
+        where: { id: validatedData.regionId },
+      });
+      
+      if (!region) {
+        return NextResponse.json(
+          { error: 'Invalid region selected' },
+          { status: 400 }
+        );
+      }
+    }
+
     const user = await createUser(
       validatedData.email,
       validatedData.username,
       validatedData.password,
-      validatedData.role
+      validatedData.role,
+      validatedData.regionId
     );
 
     return NextResponse.json(
