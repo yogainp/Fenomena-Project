@@ -44,31 +44,15 @@ interface Region {
   regionCode: string;
 }
 
-interface User {
-  id: string;
-  role: string;
-  regionId?: string;
-}
 
 export default function PhenomenaPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Form state
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    categoryId: '',
-    periodId: '',
-    regionId: '',
-  });
   
   // Filter state
   const [filters, setFilters] = useState({
@@ -90,11 +74,10 @@ export default function PhenomenaPage() {
     try {
       setLoading(true);
       
-      const [categoriesRes, periodsRes, regionsRes, userRes] = await Promise.all([
+      const [categoriesRes, periodsRes, regionsRes] = await Promise.all([
         fetch('/api/categories'),
         fetch('/api/periods'),
         fetch('/api/regions'),
-        fetch('/api/profile'),
       ]);
       
       if (categoriesRes.ok) {
@@ -110,20 +93,6 @@ export default function PhenomenaPage() {
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
         setRegions(regionsData.regions);
-      }
-      
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        setCurrentUser({
-          id: userData.id,
-          role: userData.role,
-          regionId: userData.regionId,
-        });
-        
-        // Set default region for non-admin users
-        if (userData.role !== 'ADMIN' && userData.regionId) {
-          setFormData(prev => ({ ...prev, regionId: userData.regionId }));
-        }
       }
       
       await fetchPhenomena();
@@ -154,49 +123,6 @@ export default function PhenomenaPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const method = editingId ? 'PUT' : 'POST';
-      const url = editingId ? `/api/phenomena/${editingId}` : '/api/phenomena';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setShowForm(false);
-        setEditingId(null);
-        const defaultRegionId = currentUser?.role !== 'ADMIN' && currentUser?.regionId ? currentUser.regionId : '';
-        setFormData({ title: '', description: '', categoryId: '', periodId: '', regionId: defaultRegionId });
-        fetchPhenomena();
-      } else {
-        setError(data.error || 'Operation failed');
-      }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    }
-  };
-
-  const handleEdit = (phenomenon: Phenomenon) => {
-    setEditingId(phenomenon.id);
-    setFormData({
-      title: phenomenon.title,
-      description: phenomenon.description,
-      categoryId: '', // We'll need to fetch this from the API
-      periodId: '', // We'll need to fetch this from the API
-      regionId: '', // We'll need to fetch this from the API
-    });
-    setShowForm(true);
-  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this phenomenon?')) return;
@@ -236,12 +162,12 @@ export default function PhenomenaPage() {
               </Link>
               <h1 className="ml-4 text-xl font-semibold">Kelola Fenomena</h1>
             </div>
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            <Link
+              href="/phenomena/add"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 inline-block"
             >
               + Tambah Fenomena
-            </button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -353,12 +279,12 @@ export default function PhenomenaPage() {
                       </div>
                     </div>
                     <div className="ml-4 flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(phenomenon)}
+                      <Link
+                        href={`/phenomena/edit/${phenomenon.id}`}
                         className="text-blue-600 hover:text-blue-800"
                       >
                         Edit
-                      </button>
+                      </Link>
                       <button
                         onClick={() => handleDelete(phenomenon.id)}
                         className="text-red-600 hover:text-red-800"
@@ -373,126 +299,6 @@ export default function PhenomenaPage() {
           </div>
         </div>
 
-        {/* Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">
-                  {editingId ? 'Edit Fenomena' : 'Tambah Fenomena Baru'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Judul Fenomena
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Deskripsi Fenomena
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Kategori Survei
-                    </label>
-                    <select
-                      value={formData.categoryId}
-                      onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    >
-                      <option value="">Pilih Kategori</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Periode Survei
-                    </label>
-                    <select
-                      value={formData.periodId}
-                      onChange={(e) => setFormData({ ...formData, periodId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    >
-                      <option value="">Pilih Periode</option>
-                      {periods.map((period) => (
-                        <option key={period.id} value={period.id}>
-                          {period.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Wilayah <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.regionId}
-                      onChange={(e) => setFormData({ ...formData, regionId: e.target.value })}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-md ${
-                        currentUser?.role !== 'ADMIN' ? 'bg-gray-100' : ''
-                      }`}
-                      required
-                      disabled={currentUser?.role !== 'ADMIN'}
-                    >
-                      <option value="">Pilih Wilayah</option>
-                      {(currentUser?.role === 'ADMIN' ? regions : regions.filter(r => r.id === currentUser?.regionId)).map((region) => (
-                        <option key={region.id} value={region.id}>
-                          {region.city} - {region.province} ({region.regionCode})
-                        </option>
-                      ))}
-                    </select>
-                    {currentUser?.role !== 'ADMIN' && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        Anda hanya dapat menginput fenomena di wilayah yang telah ditetapkan
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end space-x-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowForm(false);
-                        setEditingId(null);
-                        const defaultRegionId = currentUser?.role !== 'ADMIN' && currentUser?.regionId ? currentUser.regionId : '';
-                        setFormData({ title: '', description: '', categoryId: '', periodId: '', regionId: defaultRegionId });
-                      }}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      {editingId ? 'Update' : 'Simpan'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -238,9 +238,12 @@ export default function CatalogPage() {
                   </div>
                   
                   <div className="bg-gray-50 px-6 py-3">
-                    <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    <Link 
+                      href={`/catalog/${phenomenon.id}`}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-block"
+                    >
                       Lihat Detail →
-                    </button>
+                    </Link>
                   </div>
                 </div>
               ))}
