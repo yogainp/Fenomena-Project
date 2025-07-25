@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
     const periodId = url.searchParams.get('periodId');
     const regionId = url.searchParams.get('regionId');
     const search = url.searchParams.get('search');
+    const count = url.searchParams.get('count') === 'true';
+    const download = url.searchParams.get('download') === 'true';
+    const format = url.searchParams.get('format') || 'json';
 
     const whereClause: any = {};
 
@@ -45,6 +48,14 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    // If only count is requested
+    if (count && !download) {
+      const total = await prisma.phenomenon.count({
+        where: whereClause,
+      });
+      return NextResponse.json({ count: total });
+    }
+
     const phenomena = await prisma.phenomenon.findMany({
       where: whereClause,
       include: {
@@ -65,6 +76,7 @@ export async function GET(request: NextRequest) {
         },
         region: {
           select: {
+            name: true,
             province: true,
             city: true,
             regionCode: true,
@@ -74,7 +86,80 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      take: download ? 10000 : undefined, // Limit download to 10k records
     });
+
+    // Handle download formats
+    if (download) {
+      const timestamp = new Date().toISOString().split('T')[0];
+      let filename = `fenomena-data-${timestamp}`;
+      let contentType = 'application/json';
+      let data: string;
+
+      // Transform data for export
+      const exportData = phenomena.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        category: p.category.name,
+        period: p.period.name,
+        region: p.region?.name || '',
+        province: p.region?.province || '',
+        city: p.region?.city || '',
+        regionCode: p.region?.regionCode || '',
+        author: p.user.username,
+        createdAt: p.createdAt,
+      }));
+
+      switch (format) {
+        case 'csv':
+          filename += '.csv';
+          contentType = 'text/csv';
+          // Create CSV content
+          const headers = ['ID', 'Judul', 'Deskripsi', 'Kategori', 'Periode', 'Wilayah', 'Provinsi', 'Kota', 'Kode Wilayah', 'Pembuat', 'Tanggal Dibuat'];
+          const csvRows = [
+            headers.join(','),
+            ...exportData.map(row => [
+              row.id,
+              `"${row.title.replace(/"/g, '""')}"`,
+              `"${row.description.replace(/"/g, '""')}"`,
+              `"${row.category}"`,
+              `"${row.period}"`,
+              `"${row.region}"`,
+              `"${row.province}"`,
+              `"${row.city}"`,
+              `"${row.regionCode}"`,
+              `"${row.author}"`,
+              row.createdAt
+            ].join(','))
+          ];
+          data = csvRows.join('\n');
+          break;
+
+        case 'excel':
+          filename += '.xlsx';
+          contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          // For Excel, we'll return JSON and let the client handle conversion
+          // In a real implementation, you'd use a library like xlsx
+          return NextResponse.json({ 
+            error: 'Excel format not yet implemented. Please use CSV or JSON.' 
+          }, { status: 400 });
+
+        default: // json
+          filename += '.json';
+          contentType = 'application/json';
+          data = JSON.stringify(exportData, null, 2);
+          break;
+      }
+
+      return new NextResponse(data, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      });
+    }
 
     return NextResponse.json(phenomena);
   } catch (error: any) {

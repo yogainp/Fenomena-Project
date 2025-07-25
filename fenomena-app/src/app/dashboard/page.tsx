@@ -193,6 +193,24 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Download Data Fenomena
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Download data fenomena dalam format CSV, JSON, atau Excel
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/download-fenomena">
+                    <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
             {user?.role === 'ADMIN' && (
               <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-3 xl:col-span-5">
                 <div className="p-6">

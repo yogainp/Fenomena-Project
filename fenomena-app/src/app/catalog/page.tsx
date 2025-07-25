@@ -17,6 +17,9 @@ interface Phenomenon {
   period: {
     name: string;
   };
+  region?: {
+    name: string;
+  };
 }
 
 interface Category {
@@ -32,10 +35,17 @@ interface Period {
   endDate: string;
 }
 
+interface Region {
+  id: string;
+  name: string;
+  code: string;
+}
+
 export default function CatalogPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -43,12 +53,9 @@ export default function CatalogPage() {
   const [filters, setFilters] = useState({
     categoryId: '',
     periodId: '',
+    regionId: '',
     search: '',
   });
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
 
   useEffect(() => {
     fetchData();
@@ -61,18 +68,19 @@ export default function CatalogPage() {
       const params = new URLSearchParams();
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
       if (filters.periodId) params.append('periodId', filters.periodId);
+      if (filters.regionId) params.append('regionId', filters.regionId);
       if (filters.search) params.append('search', filters.search);
       
-      const [phenomenaRes, categoriesRes, periodsRes] = await Promise.all([
+      const [phenomenaRes, categoriesRes, periodsRes, regionsRes] = await Promise.all([
         fetch(`/api/phenomena?${params.toString()}`),
         fetch('/api/categories'),
         fetch('/api/periods'),
+        fetch('/api/regions'),
       ]);
 
       if (phenomenaRes.ok) {
         const phenomenaData = await phenomenaRes.json();
         setPhenomena(phenomenaData);
-        setCurrentPage(1); // Reset to first page when filters change
       }
       
       if (categoriesRes.ok) {
@@ -84,6 +92,11 @@ export default function CatalogPage() {
         const periodsData = await periodsRes.json();
         setPeriods(periodsData);
       }
+
+      if (regionsRes.ok) {
+        const regionsData = await regionsRes.json();
+        setRegions(regionsData);
+      }
     } catch (error) {
       setError('Failed to load data');
     } finally {
@@ -91,16 +104,25 @@ export default function CatalogPage() {
     }
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(phenomena.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentPhenomena = phenomena.slice(startIndex, endIndex);
+  // Timeline View Logic
+  const sortedPhenomena = [...phenomena].sort((a, b) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
-  const goToPage = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const groupedByMonth = sortedPhenomena.reduce((groups, phenomenon) => {
+    const date = new Date(phenomenon.createdAt);
+    const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const monthName = date.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+    
+    if (!groups[monthYear]) {
+      groups[monthYear] = {
+        name: monthName,
+        items: []
+      };
+    }
+    groups[monthYear].items.push(phenomenon);
+    return groups;
+  }, {} as Record<string, { name: string, items: Phenomenon[] }>);
 
   if (loading) {
     return (
@@ -134,8 +156,16 @@ export default function CatalogPage() {
 
         {/* Search and Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <h2 className="text-lg font-semibold mb-4">Cari Fenomena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Cari Fenomena</h2>
+            <Link 
+              href="/download-fenomena" 
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+            >
+              Download Data 📊
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Pencarian
@@ -182,111 +212,101 @@ export default function CatalogPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Wilayah
+              </label>
+              <select
+                value={filters.regionId}
+                onChange={(e) => setFilters({ ...filters, regionId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="">Semua Wilayah</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Results Summary */}
         <div className="mb-6">
           <p className="text-gray-600">
-            Menampilkan {startIndex + 1}-{Math.min(endIndex, phenomena.length)} dari {phenomena.length} fenomena
+            Menampilkan {phenomena.length} fenomena dalam tampilan timeline
           </p>
         </div>
 
-        {/* Phenomena Grid */}
+        {/* Timeline View */}
         {phenomena.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <div className="text-gray-500 text-lg">Tidak ada fenomena yang ditemukan</div>
             <p className="text-gray-400 mt-2">Coba ubah filter pencarian atau kata kunci</p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {currentPhenomena.map((phenomenon) => (
-                <div key={phenomenon.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                      {phenomenon.title}
-                    </h3>
-                    <p className="text-gray-600 text-sm mb-4 line-clamp-3">
-                      {phenomenon.description}
-                    </p>
-                    
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-500 w-20">Kategori:</span>
-                        <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs">
-                          {phenomenon.category.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-500 w-20">Periode:</span>
-                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">
-                          {phenomenon.period.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-500 w-20">Oleh:</span>
-                        <span className="text-gray-700">{phenomenon.user.username}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-500 w-20">Tanggal:</span>
-                        <span className="text-gray-700">
-                          {new Date(phenomenon.createdAt).toLocaleDateString('id-ID')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gray-50 px-6 py-3">
-                    <Link 
-                      href={`/catalog/${phenomenon.id}`}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-block"
-                    >
-                      Lihat Detail →
-                    </Link>
+          <div className="relative">
+            {/* Timeline line */}
+            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+            
+            {Object.entries(groupedByMonth).map(([monthYear, group]) => (
+              <div key={monthYear} className="relative mb-8">
+                {/* Month header */}
+                <div className="flex items-center mb-4">
+                  <div className="absolute left-6 w-4 h-4 bg-blue-600 rounded-full border-4 border-white shadow"></div>
+                  <div className="ml-16">
+                    <h3 className="text-lg font-semibold text-gray-900">{group.name}</h3>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center space-x-2">
-                <button
-                  onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
                 
-                {[...Array(totalPages)].map((_, index) => {
-                  const page = index + 1;
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => goToPage(page)}
-                      className={`px-3 py-2 border rounded-md ${
-                        currentPage === page
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                })}
-                
-                <button
-                  onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
+                {/* Phenomena for this month */}
+                <div className="ml-16 space-y-4">
+                  {group.items.map((phenomenon) => (
+                    <div key={phenomenon.id} className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                            {phenomenon.title}
+                          </h4>
+                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                            {phenomenon.description}
+                          </p>
+                          
+                          <div className="flex items-center flex-wrap gap-2 text-sm">
+                            <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                              {phenomenon.category.name}
+                            </span>
+                            <span className="text-green-600 bg-green-50 px-2 py-1 rounded">
+                              {phenomenon.period.name}
+                            </span>
+                            {phenomenon.region && (
+                              <span className="text-purple-600 bg-purple-50 px-2 py-1 rounded">
+                                {phenomenon.region.name}
+                              </span>
+                            )}
+                            <span className="text-gray-600">
+                              oleh {phenomenon.user.username}
+                            </span>
+                            <span className="text-gray-500">
+                              {new Date(phenomenon.createdAt).toLocaleDateString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <Link 
+                          href={`/catalog/${phenomenon.id}`}
+                          className="ml-4 text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Detail →
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </>
+            ))}
+          </div>
         )}
       </div>
     </div>
