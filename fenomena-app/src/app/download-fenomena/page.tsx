@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { makeAuthenticatedRequest } from '@/lib/client-auth';
 
 interface Category {
   id: string;
@@ -60,9 +61,9 @@ export default function DownloadFenomenaPage() {
       setLoading(true);
       
       const [categoriesRes, periodsRes, regionsRes] = await Promise.all([
-        fetch('/api/categories'),
-        fetch('/api/periods'),
-        fetch('/api/regions'),
+        makeAuthenticatedRequest('/api/categories'),
+        makeAuthenticatedRequest('/api/periods'),
+        makeAuthenticatedRequest('/api/regions'),
       ]);
 
       if (categoriesRes.ok) {
@@ -81,6 +82,7 @@ export default function DownloadFenomenaPage() {
       }
     } catch (error) {
       setError('Failed to load metadata');
+      console.error('Fetch metadata error:', error);
     } finally {
       setLoading(false);
     }
@@ -95,7 +97,7 @@ export default function DownloadFenomenaPage() {
       if (filters.regionId) params.append('regionId', filters.regionId);
       params.append('count', 'true');
 
-      const response = await fetch(`/api/phenomena?${params.toString()}`);
+      const response = await makeAuthenticatedRequest(`/api/phenomena?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setPreviewCount(data.count || data.length);
@@ -125,7 +127,7 @@ export default function DownloadFenomenaPage() {
       params.append('format', filters.format);
       params.append('download', 'true');
 
-      const response = await fetch(`/api/phenomena?${params.toString()}`);
+      const response = await makeAuthenticatedRequest(`/api/phenomena?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error('Download failed');

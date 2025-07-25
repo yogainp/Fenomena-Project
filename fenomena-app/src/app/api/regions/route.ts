@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    return NextResponse.json({ regions });
+    return NextResponse.json(regions);
 
   } catch (error: any) {
     console.error('Get regions error:', error);

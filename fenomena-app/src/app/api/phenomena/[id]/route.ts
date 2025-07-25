@@ -35,6 +35,16 @@ export async function GET(
           select: {
             id: true,
             name: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
           },
         },
       },

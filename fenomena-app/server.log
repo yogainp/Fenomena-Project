@@ -41,3 +41,166 @@
  ✓ Compiled middleware in 81ms
  ✓ Compiled middleware in 2ms
  ✓ Compiled middleware in 5ms
+ ○ Compiling /api/phenomena ...
+ ✓ Compiled /api/phenomena in 4.3s
+=== Authentication Debug ===
+Request URL: http://localhost:3003/api/phenomena
+Request method: GET
+All cookies: []
+Auth token cookie: NOT FOUND
+Authorization header: NOT FOUND
+Content-Type header: application/json
+Authentication result: FAILED
+Authentication failed - throwing error
+ GET /api/phenomena 403 in 5006ms
+ ✓ Compiled /api/auth/login in 314ms
+ POST /api/auth/login 200 in 1086ms
+=== Authentication Debug ===
+Request URL: http://localhost:3003/api/phenomena
+Request method: GET
+All cookies: [
+  {
+    name: 'auth-token',
+    value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+  }
+]
+Auth token cookie: {
+  name: 'auth-token',
+  value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+}
+Authorization header: NOT FOUND
+Content-Type header: application/json
+Authentication result: {
+  userId: 'cmdi6y6fu000fezdg1y9vcp9x',
+  email: 'admin@fenomena.com',
+  role: 'ADMIN'
+}
+Authentication successful
+Get phenomena error: Error [PrismaClientValidationError]: 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].phenomenon.findMany()` invocation in
+C:\Dev\Fenomena Project\fenomena-app\.next\server\chunks\[root-of-the-server]__447c1737._.js:344:173
+
+  341         count: total
+  342     });
+  343 }
+→ 344 const phenomena = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].phenomenon.findMany({
+        where: {},
+        include: {
+          user: {
+            select: {
+              username: true
+            }
+          },
+          category: {
+            select: {
+              name: true
+            }
+          },
+          period: {
+            select: {
+              name: true
+            }
+          },
+          region: {
+            select: {
+              name: true,
+              ~~~~
+              province: true,
+              city: true,
+              regionCode: true,
+      ?       id?: true,
+      ?       createdAt?: true,
+      ?       updatedAt?: true,
+      ?       users?: true,
+      ?       phenomena?: true,
+      ?       catatanSurvei?: true,
+      ?       _count?: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: undefined
+      })
+
+Unknown field `name` for select statement on model `Region`. Available options are marked with ?.
+    at <unknown> (src\app\api\phenomena\route.ts:59:46)
+    at async GET (src\app\api\phenomena\route.ts:59:22)
+  57 |     }
+  58 |
+> 59 |     const phenomena = await prisma.phenomenon.findMany({
+     |                                              ^
+  60 |       where: whereClause,
+  61 |       include: {
+  62 |         user: { {
+  clientVersion: '6.12.0'
+}
+ GET /api/phenomena 500 in 543ms
+=== Authentication Debug ===
+Request URL: http://localhost:3003/api/phenomena
+Request method: GET
+All cookies: [
+  {
+    name: 'auth-token',
+    value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+  }
+]
+Auth token cookie: {
+  name: 'auth-token',
+  value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+}
+Authorization header: NOT FOUND
+Content-Type header: application/json
+Authentication result: {
+  userId: 'cmdi6y6fu000fezdg1y9vcp9x',
+  email: 'admin@fenomena.com',
+  role: 'ADMIN'
+}
+Authentication successful
+ GET /api/phenomena 200 in 381ms
+ ✓ Compiled /api/regions in 440ms
+=== Authentication Debug ===
+Request URL: http://localhost:3003/api/regions
+Request method: GET
+All cookies: [
+  {
+    name: 'auth-token',
+    value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+  }
+]
+Auth token cookie: {
+  name: 'auth-token',
+  value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+}
+Authorization header: NOT FOUND
+Content-Type header: application/json
+Authentication result: {
+  userId: 'cmdi6y6fu000fezdg1y9vcp9x',
+  email: 'admin@fenomena.com',
+  role: 'ADMIN'
+}
+Authentication successful
+ GET /api/regions 200 in 566ms
+=== Authentication Debug ===
+Request URL: http://localhost:3003/api/regions
+Request method: GET
+All cookies: [
+  {
+    name: 'auth-token',
+    value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+  }
+]
+Auth token cookie: {
+  name: 'auth-token',
+  value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiO...'
+}
+Authorization header: NOT FOUND
+Content-Type header: application/json
+Authentication result: {
+  userId: 'cmdi6y6fu000fezdg1y9vcp9x',
+  email: 'admin@fenomena.com',
+  role: 'ADMIN'
+}
+Authentication successful
+ GET /api/regions 200 in 438ms

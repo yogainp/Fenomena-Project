@@ -5,13 +5,17 @@ const prisma = new PrismaClient();
 async function addMoreData() {
   console.log('🌱 Adding more diverse phenomena data...');
 
-  // Get existing users, categories, and periods
+  // Get existing users, categories, periods, and regions
   const users = await prisma.user.findMany();
   const categories = await prisma.surveyCategory.findMany();
   const periods = await prisma.surveyPeriod.findMany();
+  const regions = await prisma.region.findMany();
 
   const adminUser = users.find(u => u.role === 'ADMIN');
   const regularUser = users.find(u => u.role === 'USER');
+
+  // Get default regions for phenomena
+  const defaultRegion = regions[0]; // Use first region as default
 
   // Diverse phenomena data from different survey types
   const morePhenomena = [
@@ -22,6 +26,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SUSENAS'))?.id || categories[0].id,
       periodId: periods.find(p => p.name.includes('Triwulan I'))?.id || periods[0].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Kenaikan Pengeluaran Kesehatan Rumah Tangga',
@@ -29,6 +34,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SUSENAS'))?.id || categories[0].id,
       periodId: periods.find(p => p.name.includes('Triwulan III'))?.id || periods[2].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Perubahan Pola Konsumsi Pangan Masyarakat',
@@ -36,6 +42,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SUSENAS'))?.id || categories[0].id,
       periodId: periods.find(p => p.name.includes('Semester I'))?.id || periods[4].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
 
     // SAKERNAS related phenomena  
@@ -45,6 +52,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SAKERNAS'))?.id || categories[1].id,
       periodId: periods.find(p => p.name.includes('Triwulan II'))?.id || periods[1].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Gender Gap dalam Partisipasi Kerja',
@@ -52,6 +60,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SAKERNAS'))?.id || categories[1].id,
       periodId: periods.find(p => p.name.includes('Triwulan IV'))?.id || periods[3].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Skill Mismatch di Pasar Tenaga Kerja',
@@ -59,6 +68,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SAKERNAS'))?.id || categories[1].id,
       periodId: periods.find(p => p.name.includes('Triwulan III'))?.id || periods[2].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
 
     // Pertanian related phenomena
@@ -68,6 +78,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Pertanian'))?.id || categories[2].id,
       periodId: periods.find(p => p.name.includes('Triwulan I'))?.id || periods[0].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Penurunan Luas Lahan Pertanian',
@@ -75,6 +86,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Pertanian'))?.id || categories[2].id,
       periodId: periods.find(p => p.name.includes('Triwulan II'))?.id || periods[1].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Fluktuasi Harga Komoditas Pertanian',
@@ -82,6 +94,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Pertanian'))?.id || categories[2].id,
       periodId: periods.find(p => p.name.includes('Triwulan IV'))?.id || periods[3].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
 
     // Industri related phenomena
@@ -91,6 +104,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Industri'))?.id || categories[3].id,
       periodId: periods.find(p => p.name.includes('Triwulan II'))?.id || periods[1].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Peningkatan Industri Kreatif Lokal',
@@ -98,6 +112,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Industri'))?.id || categories[3].id,
       periodId: periods.find(p => p.name.includes('Semester I'))?.id || periods[4].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Relokasi Industri ke Kawasan Industri Baru',
@@ -105,6 +120,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Industri'))?.id || categories[3].id,
       periodId: periods.find(p => p.name.includes('Triwulan III'))?.id || periods[2].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
 
     // Perdagangan related phenomena
@@ -114,6 +130,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Perdagangan'))?.id || categories[4].id,
       periodId: periods.find(p => p.name.includes('Triwulan I'))?.id || periods[0].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Defisit Neraca Perdagangan Regional',
@@ -121,6 +138,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Perdagangan'))?.id || categories[4].id,
       periodId: periods.find(p => p.name.includes('Triwulan IV'))?.id || periods[3].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Pertumbuhan Ekspor Produk Digital',
@@ -128,6 +146,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Perdagangan'))?.id || categories[4].id,
       periodId: periods.find(p => p.name.includes('Semester I'))?.id || periods[4].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
 
     // Cross-sector phenomena
@@ -137,6 +156,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Pertanian'))?.id || categories[2].id,
       periodId: periods.find(p => p.name.includes('Triwulan II'))?.id || periods[1].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Digitalisasi UMKM dan Akses Permodalan',
@@ -144,6 +164,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('Perdagangan'))?.id || categories[4].id,
       periodId: periods.find(p => p.name.includes('Triwulan III'))?.id || periods[2].id,
       userId: regularUser?.id || users[0].id,
+      regionId: regularUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
     {
       title: 'Work From Home dan Produktivitas Kerja',
@@ -151,6 +172,7 @@ async function addMoreData() {
       categoryId: categories.find(c => c.name.includes('SAKERNAS'))?.id || categories[1].id,
       periodId: periods.find(p => p.name.includes('Triwulan I'))?.id || periods[0].id,
       userId: adminUser?.id || users[0].id,
+      regionId: adminUser?.regionId || defaultRegion?.id || regions[0]?.id,
     },
   ];
 

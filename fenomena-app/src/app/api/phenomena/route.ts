@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
         },
         region: {
           select: {
-            name: true,
             province: true,
             city: true,
             regionCode: true,
@@ -103,7 +102,7 @@ export async function GET(request: NextRequest) {
         description: p.description,
         category: p.category.name,
         period: p.period.name,
-        region: p.region?.name || '',
+        region: p.region?.city || '',
         province: p.region?.province || '',
         city: p.region?.city || '',
         regionCode: p.region?.regionCode || '',

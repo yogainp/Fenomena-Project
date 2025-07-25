@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { makeAuthenticatedRequest } from '@/lib/client-auth';
 
 interface Phenomenon {
   id: string;
@@ -18,7 +19,9 @@ interface Phenomenon {
     name: string;
   };
   region?: {
-    name: string;
+    province: string;
+    city: string;
+    regionCode: string;
   };
 }
 
@@ -37,8 +40,9 @@ interface Period {
 
 interface Region {
   id: string;
-  name: string;
-  code: string;
+  province: string;
+  city: string;
+  regionCode: string;
 }
 
 export default function CatalogPage() {
@@ -72,33 +76,37 @@ export default function CatalogPage() {
       if (filters.search) params.append('search', filters.search);
       
       const [phenomenaRes, categoriesRes, periodsRes, regionsRes] = await Promise.all([
-        fetch(`/api/phenomena?${params.toString()}`),
-        fetch('/api/categories'),
-        fetch('/api/periods'),
-        fetch('/api/regions'),
+        makeAuthenticatedRequest(`/api/phenomena?${params.toString()}`),
+        makeAuthenticatedRequest('/api/categories'),
+        makeAuthenticatedRequest('/api/periods'),
+        makeAuthenticatedRequest('/api/regions'),
       ]);
 
       if (phenomenaRes.ok) {
         const phenomenaData = await phenomenaRes.json();
-        setPhenomena(phenomenaData);
+        setPhenomena(Array.isArray(phenomenaData) ? phenomenaData : []);
+      } else {
+        console.error('Failed to fetch phenomena:', phenomenaRes.status);
+        setPhenomena([]);
       }
       
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json();
-        setCategories(categoriesData);
+        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       }
       
       if (periodsRes.ok) {
         const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
+        setPeriods(Array.isArray(periodsData) ? periodsData : []);
       }
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData);
+        setRegions(Array.isArray(regionsData) ? regionsData : []);
       }
     } catch (error) {
       setError('Failed to load data');
+      console.error('Fetch data error:', error);
     } finally {
       setLoading(false);
     }
@@ -188,7 +196,7 @@ export default function CatalogPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Kategori</option>
-                {categories.map((category) => (
+                {categories && categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
@@ -205,7 +213,7 @@ export default function CatalogPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Periode</option>
-                {periods.map((period) => (
+                {periods && periods.map((period) => (
                   <option key={period.id} value={period.id}>
                     {period.name}
                   </option>
@@ -222,9 +230,9 @@ export default function CatalogPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Wilayah</option>
-                {regions.map((region) => (
+                {regions && regions.map((region) => (
                   <option key={region.id} value={region.id}>
-                    {region.name}
+                    {region.city}
                   </option>
                 ))}
               </select>
@@ -282,7 +290,7 @@ export default function CatalogPage() {
                             </span>
                             {phenomenon.region && (
                               <span className="text-purple-600 bg-purple-50 px-2 py-1 rounded">
-                                {phenomenon.region.name}
+                                {phenomenon.region.city}
                               </span>
                             )}
                             <span className="text-gray-600">
