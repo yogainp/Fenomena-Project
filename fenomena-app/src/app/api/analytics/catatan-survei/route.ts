@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
     const regionId = searchParams.get('regionId');
-    const userId = searchParams.get('userId');
+    const periodId = searchParams.get('periodId');
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     if (regionId && regionId !== 'all') {
       whereConditions.regionId = regionId;
     }
-    if (userId && userId !== 'all') {
-      whereConditions.userId = userId;
+    if (periodId && periodId !== 'all') {
+      whereConditions.periodId = periodId;
     }
 
     // If user is not admin, restrict to their data
@@ -53,6 +53,14 @@ export async function GET(request: NextRequest) {
             province: true,
             city: true,
             regionCode: true,
+          },
+        },
+        period: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
           },
         },
         user: {
@@ -262,8 +270,8 @@ export async function GET(request: NextRequest) {
       filterInfo: {
         categoryId: categoryId || 'all',
         regionId: regionId || 'all',
-        userId: userId || 'all',
-        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(userId && userId !== 'all')
+        periodId: periodId || 'all',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(periodId && periodId !== 'all')
       },
     });
 

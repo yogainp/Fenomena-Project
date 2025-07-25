@@ -101,17 +101,17 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
             {/* Navigation Cards */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6">
+              <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Kelola Fenomena
                 </h3>
-                <p className="mt-2 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-gray-500 flex-1">
                   Input dan kelola data fenomena survei
                 </p>
-                <div className="mt-4">
+                <div className="mt-4 flex justify-end">
                   <Link href="/phenomena">
                     <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
                       Buka
@@ -122,14 +122,14 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6">
+              <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Katalog Fenomena
                 </h3>
-                <p className="mt-2 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-gray-500 flex-1">
                   Browse dan cari fenomena yang tersedia
                 </p>
-                <div className="mt-4">
+                <div className="mt-4 flex justify-end">
                   <Link href="/catalog">
                     <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                       Buka
@@ -140,14 +140,14 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6">
+              <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Analisis
                 </h3>
-                <p className="mt-2 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-gray-500 flex-1">
                   Lihat analisis dan visualisasi data
                 </p>
-                <div className="mt-4">
+                <div className="mt-4 flex justify-end">
                   <Link href="/analytics">
                     <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
                       Buka
@@ -158,14 +158,14 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6">
+              <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Catatan Survei
                 </h3>
-                <p className="mt-2 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-gray-500 flex-1">
                   Upload data survei CSV dan analisis teks
                 </p>
-                <div className="mt-4">
+                <div className="mt-4 flex justify-end">
                   <Link href="/catatan-survei">
                     <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
                       Buka
@@ -175,8 +175,26 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Analisis Catatan Survei
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Analisis teks dan visualisasi data catatan survei
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/catatan-survei/analisis">
+                    <button className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
             {user?.role === 'ADMIN' && (
-              <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-4">
+              <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-3 xl:col-span-5">
                 <div className="p-6">
                   <h3 className="text-lg leading-6 font-medium text-gray-900">
                     Panel Admin

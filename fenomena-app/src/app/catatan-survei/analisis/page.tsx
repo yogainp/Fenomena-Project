@@ -17,7 +17,7 @@ interface AnalysisData {
   filterInfo: {
     categoryId: string;
     regionId: string;
-    userId: string;
+    periodId: string;
     isFiltered: boolean;
   };
 }
@@ -34,16 +34,19 @@ interface Region {
   regionCode: string;
 }
 
-interface User {
+interface Period {
   id: string;
-  username: string;
+  name: string;
+  startDate: string;
+  endDate: string;
 }
+
 
 export default function CatatanSurveiAnalysisPage() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -51,7 +54,7 @@ export default function CatatanSurveiAnalysisPage() {
   const [filters, setFilters] = useState({
     categoryId: 'all',
     regionId: 'all',
-    userId: 'all',
+    periodId: 'all',
   });
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
@@ -61,17 +64,17 @@ export default function CatatanSurveiAnalysisPage() {
   }, []);
 
   useEffect(() => {
-    if (categories.length > 0 || regions.length > 0 || users.length > 0) {
+    if (categories.length > 0 || regions.length > 0 || periods.length > 0) {
       fetchAnalysisData();
     }
   }, [filters]);
 
   const fetchInitialData = async () => {
     try {
-      const [categoriesRes, regionsRes, usersRes] = await Promise.all([
+      const [categoriesRes, regionsRes, periodsRes] = await Promise.all([
         fetch('/api/categories'),
         fetch('/api/regions'),
-        fetch('/api/admin/users'),
+        fetch('/api/periods'),
       ]);
 
       if (categoriesRes.ok) {
@@ -84,9 +87,9 @@ export default function CatatanSurveiAnalysisPage() {
         setRegions(regionsData.regions || regionsData);
       }
 
-      if (usersRes.ok) {
-        const usersData = await usersRes.json();
-        setUsers(usersData.users || usersData);
+      if (periodsRes.ok) {
+        const periodsData = await periodsRes.json();
+        setPeriods(periodsData.periods || periodsData);
       }
 
       // Fetch analysis data after getting the initial data
@@ -104,7 +107,7 @@ export default function CatatanSurveiAnalysisPage() {
       const params = new URLSearchParams();
       if (filters.categoryId !== 'all') params.append('categoryId', filters.categoryId);
       if (filters.regionId !== 'all') params.append('regionId', filters.regionId);
-      if (filters.userId !== 'all') params.append('userId', filters.userId);
+      if (filters.periodId !== 'all') params.append('periodId', filters.periodId);
       
       const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`);
       
@@ -126,7 +129,7 @@ export default function CatatanSurveiAnalysisPage() {
     setFilters({
       categoryId: 'all',
       regionId: 'all',
-      userId: 'all',
+      periodId: 'all',
     });
   };
 
@@ -223,6 +226,24 @@ export default function CatatanSurveiAnalysisPage() {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
+                Periode Survei
+              </label>
+              <select
+                value={filters.periodId}
+                onChange={(e) => setFilters({ ...filters, periodId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">Semua Periode</option>
+                {periods.map((period) => (
+                  <option key={period.id} value={period.id}>
+                    {period.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Wilayah
               </label>
               <select
@@ -234,24 +255,6 @@ export default function CatatanSurveiAnalysisPage() {
                 {regions.map((region) => (
                   <option key={region.id} value={region.id}>
                     {region.city} - {region.province}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                User
-              </label>
-              <select
-                value={filters.userId}
-                onChange={(e) => setFilters({ ...filters, userId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">Semua User</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.username}
                   </option>
                 ))}
               </select>
