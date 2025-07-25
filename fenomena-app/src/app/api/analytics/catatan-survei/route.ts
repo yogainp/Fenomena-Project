@@ -1,0 +1,277 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/middleware';
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = requireAuth(request);
+    console.log('Catatan survei text analysis request by user:', user.userId);
+
+    // Get query parameters for filtering
+    const { searchParams } = new URL(request.url);
+    const categoryId = searchParams.get('categoryId');
+    const regionId = searchParams.get('regionId');
+    const userId = searchParams.get('userId');
+
+    // Build filter conditions
+    const whereConditions: any = {};
+    if (categoryId && categoryId !== 'all') {
+      whereConditions.categoryId = categoryId;
+    }
+    if (regionId && regionId !== 'all') {
+      whereConditions.regionId = regionId;
+    }
+    if (userId && userId !== 'all') {
+      whereConditions.userId = userId;
+    }
+
+    // If user is not admin, restrict to their data
+    if (user.role !== 'ADMIN') {
+      if (user.regionId) {
+        whereConditions.regionId = user.regionId;
+      } else {
+        whereConditions.userId = user.userId;
+      }
+    }
+
+    // Get catatan survei texts for analysis with optional filtering
+    const catatanSurvei = await prisma.catatanSurvei.findMany({
+      where: whereConditions,
+      select: {
+        id: true,
+        catatan: true,
+        createdAt: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    // Simple text analysis functions (same as phenomena analysis)
+    function extractKeywords(text: string): string[] {
+      // Convert to lowercase and remove punctuation
+      const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+      
+      // Split into words and filter out common stop words
+      const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
+      
+      const words = cleanText.split(/\s+/)
+        .filter(word => word.length > 3 && !stopWords.includes(word))
+        .filter(word => !word.match(/^\d+$/)); // Remove pure numbers
+      
+      return words;
+    }
+
+    function getWordFrequency(words: string[]): { [key: string]: number } {
+      const frequency: { [key: string]: number } = {};
+      words.forEach(word => {
+        frequency[word] = (frequency[word] || 0) + 1;
+      });
+      return frequency;
+    }
+
+    function getSentimentScore(text: string): 'positive' | 'negative' | 'neutral' {
+      const positiveWords = ['peningkatan', 'pertumbuhan', 'kenaikan', 'perbaikan', 'kemajuan', 'sukses', 'baik', 'meningkat', 'tumbuh', 'berkembang', 'optimal', 'efisien', 'berhasil', 'positif', 'bagus', 'mantap'];
+      const negativeWords = ['penurunan', 'pengurangan', 'defisit', 'masalah', 'tantangan', 'kesulitan', 'gagal', 'turun', 'menurun', 'berkurang', 'buruk', 'krisis', 'negatif', 'jelek', 'rusak', 'hancur'];
+      
+      const lowerText = text.toLowerCase();
+      
+      let positiveScore = 0;
+      let negativeScore = 0;
+      
+      positiveWords.forEach(word => {
+        if (lowerText.includes(word)) positiveScore++;
+      });
+      
+      negativeWords.forEach(word => {
+        if (lowerText.includes(word)) negativeScore++;
+      });
+      
+      if (positiveScore > negativeScore) return 'positive';
+      if (negativeScore > positiveScore) return 'negative';
+      return 'neutral';
+    }
+
+    function analyzeProximityWords(text: string, windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
+      const targetKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh', 'masalah', 'solusi', 'perbaikan'];
+      const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+      const words = cleanText.split(/\s+/).filter(word => word.length > 2);
+      const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
+      
+      const result: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
+      
+      targetKeywords.forEach(keyword => {
+        result[keyword] = { proximityWords: {}, totalOccurrences: 0 };
+        
+        for (let i = 0; i < words.length; i++) {
+          if (words[i].includes(keyword) || keyword.includes(words[i])) {
+            result[keyword].totalOccurrences++;
+            
+            // Analyze words within the window
+            const start = Math.max(0, i - windowSize);
+            const end = Math.min(words.length, i + windowSize + 1);
+            
+            for (let j = start; j < end; j++) {
+              if (j !== i && words[j].length > 3 && !stopWords.includes(words[j]) && !words[j].match(/^\d+$/)) {
+                const proximityWord = words[j];
+                result[keyword].proximityWords[proximityWord] = (result[keyword].proximityWords[proximityWord] || 0) + 1;
+              }
+            }
+          }
+        }
+      });
+      
+      return result;
+    }
+
+    // Analyze all catatan survei texts
+    let allWords: string[] = [];
+    const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
+    const categoryKeywords: { [category: string]: string[] } = {};
+    const regionKeywords: { [region: string]: string[] } = {};
+    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {
+      'peningkatan': { proximityWords: {}, totalOccurrences: 0 },
+      'penurunan': { proximityWords: {}, totalOccurrences: 0 },
+      'naik': { proximityWords: {}, totalOccurrences: 0 },
+      'turun': { proximityWords: {}, totalOccurrences: 0 },
+      'tumbuh': { proximityWords: {}, totalOccurrences: 0 },
+      'masalah': { proximityWords: {}, totalOccurrences: 0 },
+      'solusi': { proximityWords: {}, totalOccurrences: 0 },
+      'perbaikan': { proximityWords: {}, totalOccurrences: 0 }
+    };
+
+    catatanSurvei.forEach(catatan => {
+      const words = extractKeywords(catatan.catatan);
+      
+      allWords = allWords.concat(words);
+      
+      // Sentiment analysis
+      const sentiment = getSentimentScore(catatan.catatan);
+      sentimentAnalysis[sentiment]++;
+      
+      // Category-specific keywords
+      const categoryName = catatan.category.name;
+      if (!categoryKeywords[categoryName]) {
+        categoryKeywords[categoryName] = [];
+      }
+      categoryKeywords[categoryName] = categoryKeywords[categoryName].concat(words);
+      
+      // Region-specific keywords
+      const regionName = `${catatan.region.city}, ${catatan.region.province}`;
+      if (!regionKeywords[regionName]) {
+        regionKeywords[regionName] = [];
+      }
+      regionKeywords[regionName] = regionKeywords[regionName].concat(words);
+      
+      // Proximity analysis
+      const proximityResults = analyzeProximityWords(catatan.catatan);
+      Object.keys(proximityResults).forEach(keyword => {
+        if (proximityAnalysisResults[keyword]) {
+          proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
+          Object.keys(proximityResults[keyword].proximityWords).forEach(word => {
+            proximityAnalysisResults[keyword].proximityWords[word] = 
+              (proximityAnalysisResults[keyword].proximityWords[word] || 0) + proximityResults[keyword].proximityWords[word];
+          });
+        }
+      });
+    });
+
+    // Get overall word frequency
+    const wordFrequency = getWordFrequency(allWords);
+    const topKeywords = Object.entries(wordFrequency)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 20)
+      .map(([word, count]) => ({ word, count }));
+
+    // Get category-specific top keywords
+    const categoryAnalysis: { [category: string]: { word: string; count: number }[] } = {};
+    Object.entries(categoryKeywords).forEach(([category, words]) => {
+      const frequency = getWordFrequency(words);
+      categoryAnalysis[category] = Object.entries(frequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([word, count]) => ({ word, count }));
+    });
+
+    // Get region-specific top keywords
+    const regionAnalysis: { [region: string]: { word: string; count: number }[] } = {};
+    Object.entries(regionKeywords).forEach(([region, words]) => {
+      const frequency = getWordFrequency(words);
+      regionAnalysis[region] = Object.entries(frequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([word, count]) => ({ word, count }));
+    });
+
+    // Calculate average note length
+    const avgNoteLength = catatanSurvei.reduce((sum, c) => sum + c.catatan.length, 0) / catatanSurvei.length;
+
+    // Word cloud data (top 50 words for visualization)
+    const wordCloudData = Object.entries(wordFrequency)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 50)
+      .map(([text, value]) => ({ text, value }));
+
+    // Process proximity analysis results
+    const proximityAnalysis: { [keyword: string]: { keyword: string, occurrences: number, topProximityWords: { word: string, count: number }[] } } = {};
+    Object.keys(proximityAnalysisResults).forEach(keyword => {
+      const data = proximityAnalysisResults[keyword];
+      const topProximityWords = Object.entries(data.proximityWords)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([word, count]) => ({ word, count }));
+      
+      proximityAnalysis[keyword] = {
+        keyword,
+        occurrences: data.totalOccurrences,
+        topProximityWords
+      };
+    });
+
+    return NextResponse.json({
+      totalCatatanSurvei: catatanSurvei.length,
+      topKeywords,
+      sentimentAnalysis: [
+        { name: 'Positif', value: sentimentAnalysis.positive },
+        { name: 'Negatif', value: sentimentAnalysis.negative },
+        { name: 'Netral', value: sentimentAnalysis.neutral },
+      ],
+      categoryAnalysis,
+      regionAnalysis,
+      avgNoteLength: Math.round(avgNoteLength || 0),
+      wordCloudData,
+      totalUniqueWords: Object.keys(wordFrequency).length,
+      proximityAnalysis,
+      filterInfo: {
+        categoryId: categoryId || 'all',
+        regionId: regionId || 'all',
+        userId: userId || 'all',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(userId && userId !== 'all')
+      },
+    });
+
+  } catch (error: any) {
+    if (error.message.includes('required')) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    console.error('Catatan survei text analysis error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

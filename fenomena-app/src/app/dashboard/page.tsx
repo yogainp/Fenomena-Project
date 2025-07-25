@@ -101,7 +101,7 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Navigation Cards */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6">
@@ -157,8 +157,26 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Catatan Survei
+                </h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Upload data survei CSV dan analisis teks
+                </p>
+                <div className="mt-4">
+                  <Link href="/catatan-survei">
+                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
             {user?.role === 'ADMIN' && (
-              <div className="bg-white overflow-hidden shadow rounded-lg md:col-span-3">
+              <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-4">
                 <div className="p-6">
                   <h3 className="text-lg leading-6 font-medium text-gray-900">
                     Panel Admin

@@ -22,7 +22,8 @@ model User {
   regionId String?
   region   Region? @relation(fields: [regionId], references: [id], onDelete: SetNull)
 
-  phenomena Phenomenon[]
+  phenomena     Phenomenon[]
+  catatanSurvei CatatanSurvei[]
 
   @@map("users")
 }
@@ -34,7 +35,8 @@ model SurveyCategory {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  phenomena Phenomenon[]
+  phenomena     Phenomenon[]
+  catatanSurvei CatatanSurvei[]
 
   @@map("survey_categories")
 }
@@ -47,7 +49,8 @@ model SurveyPeriod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  phenomena Phenomenon[]
+  phenomena     Phenomenon[]
+  catatanSurvei CatatanSurvei[]
 
   @@map("survey_periods")
 }
@@ -60,8 +63,9 @@ model Region {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users     User[]
-  phenomena Phenomenon[]
+  users         User[]
+  phenomena     Phenomenon[]
+  catatanSurvei CatatanSurvei[]
 
   @@map("regions")
 }
@@ -94,10 +98,36 @@ model AnalysisResult {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  phenomenonId String
-  phenomenon   Phenomenon @relation(fields: [phenomenonId], references: [id], onDelete: Cascade)
+  phenomenonId     String?
+  phenomenon       Phenomenon?    @relation(fields: [phenomenonId], references: [id], onDelete: Cascade)
+  catatanSurveiId  String?
+  catatanSurvei    CatatanSurvei? @relation(fields: [catatanSurveiId], references: [id], onDelete: Cascade)
 
   @@map("analysis_results")
+}
+
+model CatatanSurvei {
+  id             String   @id @default(cuid())
+  nomorResponden Int      // Nomor urut responden dalam survei (integer)
+  respondenId    String   // Auto-generated: "${categoryId}-${periodId}-${nomorResponden}"
+  catatan        String   @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  regionId   String
+  region     Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   SurveyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  periodId   String
+  period     SurveyPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  analysisResults AnalysisResult[]
+
+  // Unique constraint untuk mencegah duplikasi responden
+  @@unique([categoryId, periodId, nomorResponden])
+  @@map("catatan_survei")
 }
 
 enum Role {
@@ -111,4 +141,5 @@ enum AnalysisType {
   CONTENT_ANALYSIS
   THEMATIC_ANALYSIS
   CORRELATION_ANALYSIS
+  SURVEY_NOTE_ANALYSIS
 }

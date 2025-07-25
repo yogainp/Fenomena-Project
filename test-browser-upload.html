@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Browser Upload</title>
+</head>
+<body>
+    <h1>Test Browser Upload</h1>
+    <form id="uploadForm">
+        <input type="file" id="fileInput" accept=".csv" required><br><br>
+        <input type="text" id="categoryId" placeholder="Category ID" value="cmdi714bz0020ezwchu0baead" required><br><br>
+        <input type="text" id="periodId" placeholder="Period ID" value="cmdi6y6py000nezdgtxjm78tt" required><br><br>
+        <button type="submit">Upload</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const categoryId = document.getElementById('categoryId').value;
+            const periodId = document.getElementById('periodId').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select a file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('categoryId', categoryId);
+            formData.append('periodId', periodId);
+            
+            console.log('=== Browser Upload Test ===');
+            console.log('File:', fileInput.files[0]);
+            console.log('Category ID:', categoryId);
+            console.log('Period ID:', periodId);
+            console.log('FormData entries:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key, value);
+            }
+            
+            try {
+                console.log('Making request...');
+                const response = await fetch('http://localhost:3002/api/catatan-survei/upload', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include',
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                const responseText = await response.text();
+                console.log('Raw response:', responseText);
+                
+                resultDiv.innerHTML = `
+                    <h3>Response Status: ${response.status}</h3>
+                    <h3>Raw Response:</h3>
+                    <pre>${responseText}</pre>
+                `;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `<h3>Error: ${error.message}</h3>`;
+            }
+        });
+    </script>
+</body>
+</html>

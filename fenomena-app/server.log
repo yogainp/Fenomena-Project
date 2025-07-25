@@ -1,0 +1,13 @@
+
+> fenomena-app@0.1.0 dev
+> next dev --turbopack
+
+ ⚠ Port 3000 is in use by an unknown process, using available port 3003 instead.
+   ▲ Next.js 15.4.2 (Turbopack)
+   - Local:        http://localhost:3003
+   - Network:      http://172.16.51.239:3003
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Compiled middleware in 360ms
+ ✓ Ready in 3.2s
