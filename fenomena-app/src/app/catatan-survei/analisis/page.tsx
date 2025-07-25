@@ -151,8 +151,8 @@ export default function CatatanSurveiAnalysisPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
               <div className="flex items-center">
-                <Link href="/catatan-survei" className="text-blue-600 hover:text-blue-800">
-                  ← Kembali ke Catatan Survei
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Kembali
                 </Link>
                 <h1 className="ml-4 text-xl font-semibold">Analisis Teks Catatan Survei</h1>
               </div>
@@ -181,8 +181,8 @@ export default function CatatanSurveiAnalysisPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/catatan-survei" className="text-blue-600 hover:text-blue-800">
-                ← Kembali ke Catatan Survei
+              <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                ← Kembali
               </Link>
               <h1 className="ml-4 text-xl font-semibold">Analisis Teks Catatan Survei</h1>
             </div>

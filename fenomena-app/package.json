@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "set PORT=3000 && next dev --turbopack --port 3000",
+    "start": "set PORT=3000 && next start --port 3000",
     "build": "next build",
-    "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed-more": "tsx prisma/seed-more-data.ts"
+    "db:seed-more": "tsx prisma/seed-more-data.ts",
+    "db:migrate": "npx prisma migrate dev && npm run server:restart",
+    "server:restart": "node scripts/restart-server.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
