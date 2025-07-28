@@ -9,6 +9,8 @@ const createUserSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   role: z.enum(['ADMIN', 'USER']).optional().default('USER'),
+  regionId: z.string().optional(),
+  isVerified: z.boolean().optional().default(false),
 });
 
 // GET /api/admin/users - List all users
@@ -21,6 +23,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const roleFilter = searchParams.get('role') || '';
+    const verificationFilter = searchParams.get('verification') || '';
 
     const skip = (page - 1) * limit;
 
@@ -38,6 +41,10 @@ export async function GET(request: NextRequest) {
       whereConditions.role = roleFilter;
     }
 
+    if (verificationFilter) {
+      whereConditions.isVerified = verificationFilter === 'verified';
+    }
+
     // Get users with pagination
     const [users, totalUsers] = await Promise.all([
       prisma.user.findMany({
@@ -47,6 +54,17 @@ export async function GET(request: NextRequest) {
           email: true,
           username: true,
           role: true,
+          regionId: true,
+          region: {
+            select: {
+              id: true,
+              province: true,
+              city: true,
+              regionCode: true,
+            },
+          },
+          isVerified: true,
+          verifiedAt: true,
           createdAt: true,
           updatedAt: true,
           _count: {
@@ -103,7 +121,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { email, username, password, role } = validationResult.data;
+    const { email, username, password, role, regionId, isVerified } = validationResult.data;
 
     // Check if email or username already exists
     const existingUser = await prisma.user.findFirst({
@@ -127,6 +145,8 @@ export async function POST(request: NextRequest) {
       username,
       password,
       role,
+      regionId: regionId || undefined,
+      isVerified,
     });
 
     // Return user without password

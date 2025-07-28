@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/middleware';
 // GET /api/regions - Get all regions for dropdown selection
 export async function GET(request: NextRequest) {
   try {
-    requireAuth(request); // Any authenticated user can access
+    // Remove auth requirement for registration page access
 
     const regions = await prisma.region.findMany({
       select: {
@@ -20,16 +20,7 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    // Transform data to include 'name' field for frontend compatibility
-    const transformedRegions = regions.map(region => ({
-      id: region.id,
-      name: `${region.province} - ${region.city}`,
-      code: region.regionCode,
-      province: region.province,
-      city: region.city,
-    }));
-
-    return NextResponse.json(transformedRegions);
+    return NextResponse.json({ regions });
 
   } catch (error: any) {
     console.error('Get regions error:', error);

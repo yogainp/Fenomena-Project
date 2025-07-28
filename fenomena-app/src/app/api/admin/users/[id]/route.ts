@@ -9,6 +9,8 @@ const updateUserSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters').optional(),
   password: z.string().min(6, 'Password must be at least 6 characters').optional(),
   role: z.enum(['ADMIN', 'USER']).optional(),
+  regionId: z.string().nullable().optional(),
+  isVerified: z.boolean().optional(),
 });
 
 // GET /api/admin/users/[id] - Get specific user
@@ -26,6 +28,17 @@ export async function GET(
         email: true,
         username: true,
         role: true,
+        regionId: true,
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
+        isVerified: true,
+        verifiedAt: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -121,6 +134,15 @@ export async function PUT(
     if (updateData.email) dataToUpdate.email = updateData.email;
     if (updateData.username) dataToUpdate.username = updateData.username;
     if (updateData.role) dataToUpdate.role = updateData.role;
+    if (updateData.regionId !== undefined) dataToUpdate.regionId = updateData.regionId;
+    if (updateData.isVerified !== undefined) {
+      dataToUpdate.isVerified = updateData.isVerified;
+      if (updateData.isVerified && !existingUser.isVerified) {
+        dataToUpdate.verifiedAt = new Date();
+      } else if (!updateData.isVerified) {
+        dataToUpdate.verifiedAt = null;
+      }
+    }
     
     if (updateData.password) {
       dataToUpdate.password = await hashPassword(updateData.password);
@@ -135,6 +157,17 @@ export async function PUT(
         email: true,
         username: true,
         role: true,
+        regionId: true,
+        region: {
+          select: {
+            id: true,
+            province: true,
+            city: true,
+            regionCode: true,
+          },
+        },
+        isVerified: true,
+        verifiedAt: true,
         createdAt: true,
         updatedAt: true,
         _count: {

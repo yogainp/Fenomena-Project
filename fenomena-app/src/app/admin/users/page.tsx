@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface User {
@@ -8,9 +9,25 @@ interface User {
   email: string;
   username: string;
   role: 'ADMIN' | 'USER';
+  regionId: string | null;
+  region?: {
+    id: string;
+    province: string;
+    city: string;
+    regionCode: string;
+  } | null;
+  isVerified: boolean;
+  verifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
   phenomenaCount: number;
+}
+
+interface Region {
+  id: string;
+  province: string;
+  city: string;
+  regionCode: string;
 }
 
 interface PaginationInfo {
@@ -27,34 +44,49 @@ interface ApiResponse {
 }
 
 export default function AdminUsersPage() {
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsLoading, setRegionsLoading] = useState(false);
   
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [verificationFilter, setVerificationFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   
   // Modal states
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
-  // Form states
+  // Form states for edit modal only
   const [formData, setFormData] = useState({
     email: '',
     username: '',
     password: '',
     role: 'USER' as 'ADMIN' | 'USER',
+    regionId: '',
+    isVerified: false,
   });
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
     fetchUsers();
-  }, [currentPage, searchTerm, roleFilter]);
+    fetchRegions();
+    
+    // Check for success message from URL params
+    const message = searchParams.get('message');
+    if (message) {
+      setSuccessMessage(message);
+      // Clear the message after showing it
+      setTimeout(() => setSuccessMessage(''), 5000);
+    }
+  }, [currentPage, searchTerm, roleFilter, verificationFilter, searchParams]);
 
   const fetchUsers = async () => {
     try {
@@ -68,6 +100,7 @@ export default function AdminUsersPage() {
       
       if (searchTerm) params.append('search', searchTerm);
       if (roleFilter) params.append('role', roleFilter);
+      if (verificationFilter) params.append('verification', verificationFilter);
       
       const response = await fetch(`/api/admin/users?${params.toString()}`);
       
@@ -88,6 +121,24 @@ export default function AdminUsersPage() {
     }
   };
 
+  const fetchRegions = async () => {
+    try {
+      setRegionsLoading(true);
+      const response = await fetch('/api/regions');
+      
+      if (response.ok) {
+        const data = await response.json();
+        setRegions(data.regions || []);
+      } else {
+        console.error('Failed to fetch regions');
+      }
+    } catch (error) {
+      console.error('Error fetching regions:', error);
+    } finally {
+      setRegionsLoading(false);
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
@@ -97,35 +148,10 @@ export default function AdminUsersPage() {
   const resetFilters = () => {
     setSearchTerm('');
     setRoleFilter('');
+    setVerificationFilter('');
     setCurrentPage(1);
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setFormLoading(true);
-      
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create user');
-      }
-      
-      setShowCreateModal(false);
-      setFormData({ email: '', username: '', password: '', role: 'USER' });
-      fetchUsers();
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setFormLoading(false);
-    }
-  };
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +164,8 @@ export default function AdminUsersPage() {
         email: formData.email,
         username: formData.username,
         role: formData.role,
+        regionId: formData.regionId || null,
+        isVerified: formData.isVerified,
       };
       
       if (formData.password) {
@@ -157,7 +185,7 @@ export default function AdminUsersPage() {
       
       setShowEditModal(false);
       setSelectedUser(null);
-      setFormData({ email: '', username: '', password: '', role: 'USER' });
+      setFormData({ email: '', username: '', password: '', role: 'USER', regionId: '', isVerified: false });
       fetchUsers();
       
     } catch (err: any) {
@@ -200,6 +228,8 @@ export default function AdminUsersPage() {
       username: user.username,
       password: '',
       role: user.role,
+      regionId: user.regionId || '',
+      isVerified: user.isVerified,
     });
     setShowEditModal(true);
   };
@@ -207,6 +237,28 @@ export default function AdminUsersPage() {
   const openDeleteModal = (user: User) => {
     setSelectedUser(user);
     setShowDeleteModal(true);
+  };
+
+  const handleApproveUser = async (userId: string) => {
+    try {
+      setFormLoading(true);
+      
+      const response = await fetch(`/api/admin/users/${userId}/approve`, {
+        method: 'PATCH',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to approve user');
+      }
+      
+      fetchUsers(); // Refresh the list
+      
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setFormLoading(false);
+    }
   };
 
   if (loading && users.length === 0) {
@@ -259,6 +311,18 @@ export default function AdminUsersPage() {
           </div>
         )}
 
+        {successMessage && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+            {successMessage}
+            <button 
+              onClick={() => setSuccessMessage('')}
+              className="ml-4 text-green-700 hover:text-green-900"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Search and Filter Section */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -279,6 +343,15 @@ export default function AdminUsersPage() {
                 <option value="USER">User</option>
                 <option value="ADMIN">Admin</option>
               </select>
+              <select
+                value={verificationFilter}
+                onChange={(e) => setVerificationFilter(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Status</option>
+                <option value="verified">Verified</option>
+                <option value="unverified">Unverified</option>
+              </select>
               <button
                 type="submit"
                 disabled={loading}
@@ -289,7 +362,7 @@ export default function AdminUsersPage() {
             </form>
             
             <div className="flex gap-2">
-              {(searchTerm || roleFilter) && (
+              {(searchTerm || roleFilter || verificationFilter) && (
                 <button
                   onClick={resetFilters}
                   className="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600"
@@ -297,12 +370,12 @@ export default function AdminUsersPage() {
                   Reset
                 </button>
               )}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
+              <Link
+                href="/admin/users/add"
+                className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 inline-block"
               >
                 + Add User
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -317,6 +390,9 @@ export default function AdminUsersPage() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Phenomena
@@ -347,6 +423,15 @@ export default function AdminUsersPage() {
                       {user.role}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      user.isVerified
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {user.isVerified ? 'Verified' : 'Pending'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {user.phenomenaCount}
                   </td>
@@ -354,6 +439,15 @@ export default function AdminUsersPage() {
                     {new Date(user.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                    {!user.isVerified && (
+                      <button
+                        onClick={() => handleApproveUser(user.id)}
+                        disabled={formLoading}
+                        className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                    )}
                     <button
                       onClick={() => openEditModal(user)}
                       className="text-blue-600 hover:text-blue-900"
@@ -428,76 +522,6 @@ export default function AdminUsersPage() {
         )}
       </div>
 
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Create New User</h3>
-            <form onSubmit={handleCreateUser}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'USER' })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setFormData({ email: '', username: '', password: '', role: 'USER' });
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {formLoading ? 'Creating...' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
@@ -536,7 +560,7 @@ export default function AdminUsersPage() {
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <select
                   value={formData.role}
@@ -547,13 +571,45 @@ export default function AdminUsersPage() {
                   <option value="ADMIN">Admin</option>
                 </select>
               </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
+                {regionsLoading ? (
+                  <div className="w-full px-3 py-2 text-gray-500 bg-gray-100 border border-gray-300 rounded">
+                    Loading regions...
+                  </div>
+                ) : (
+                  <select
+                    value={formData.regionId}
+                    onChange={(e) => setFormData({ ...formData, regionId: e.target.value })}
+                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Region (Optional)</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.city} - {region.province} ({region.regionCode})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="mb-6">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.isVerified}
+                    onChange={(e) => setFormData({ ...formData, isVerified: e.target.checked })}
+                    className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">User is verified</span>
+                </label>
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditModal(false);
                     setSelectedUser(null);
-                    setFormData({ email: '', username: '', password: '', role: 'USER' });
+                    setFormData({ email: '', username: '', password: '', role: 'USER', regionId: '', isVerified: false });
                   }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                 >

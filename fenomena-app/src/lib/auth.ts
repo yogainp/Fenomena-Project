@@ -8,6 +8,7 @@ export interface TokenPayload {
   userId: string;
   email: string;
   role: string;
+  regionId?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -33,22 +34,25 @@ export function verifyToken(token: string): TokenPayload | null {
   }
 }
 
-export async function createUser(
-  email: string,
-  username: string,
-  password: string,
-  role: 'ADMIN' | 'USER' = 'USER',
-  regionId?: string
-) {
-  const hashedPassword = await hashPassword(password);
+export async function createUser(params: {
+  email: string;
+  username: string;
+  password: string;
+  role?: 'ADMIN' | 'USER';
+  regionId?: string;
+  isVerified?: boolean;
+}) {
+  const hashedPassword = await hashPassword(params.password);
   
   return prisma.user.create({
     data: {
-      email,
-      username,
+      email: params.email,
+      username: params.username,
       password: hashedPassword,
-      role,
-      regionId,
+      role: params.role || 'USER',
+      regionId: params.regionId || null,
+      isVerified: params.isVerified || false,
+      verifiedAt: params.isVerified ? new Date() : null,
     },
     select: {
       id: true,
@@ -64,6 +68,8 @@ export async function createUser(
           regionCode: true,
         },
       },
+      isVerified: true,
+      verifiedAt: true,
       createdAt: true,
     },
   });
@@ -72,6 +78,9 @@ export async function createUser(
 export async function authenticateUser(email: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { email },
+    include: {
+      region: true,
+    },
   });
 
   if (!user) {
@@ -83,10 +92,17 @@ export async function authenticateUser(email: string, password: string) {
     return null;
   }
 
+  // Check if user is verified
+  if (!user.isVerified) {
+    throw new Error('UNVERIFIED_USER');
+  }
+
   return {
     id: user.id,
     email: user.email,
     username: user.username,
     role: user.role,
+    regionId: user.regionId,
+    region: user.region,
   };
 }

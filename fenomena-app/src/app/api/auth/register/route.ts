@@ -8,7 +8,6 @@ const registerSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   regionId: z.string().min(1, 'Region is required'),
-  role: z.enum(['ADMIN', 'USER']).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -47,13 +46,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const user = await createUser(
-      validatedData.email,
-      validatedData.username,
-      validatedData.password,
-      validatedData.role,
-      validatedData.regionId
-    );
+    const user = await createUser({
+      email: validatedData.email,
+      username: validatedData.username,
+      password: validatedData.password,
+      role: 'USER', // Always set to USER for new registrations
+      regionId: validatedData.regionId,
+      isVerified: false, // New registrations are always unverified
+    });
 
     return NextResponse.json(
       { message: 'User created successfully', user },

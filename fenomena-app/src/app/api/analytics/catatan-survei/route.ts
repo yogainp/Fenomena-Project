@@ -5,8 +5,6 @@ import { requireAuth } from '@/lib/middleware';
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
-    console.log('Catatan survei text analysis request by user:', user.userId);
-
     // Get query parameters for filtering
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
@@ -25,11 +23,19 @@ export async function GET(request: NextRequest) {
       whereConditions.periodId = periodId;
     }
 
-    // If user is not admin, restrict to their data based on role
+    // Apply role-based data filtering
     if (user.role !== 'ADMIN') {
       if (user.regionId) {
-        whereConditions.regionId = user.regionId;
+        // Regional user can see data from their region
+        // If no region filter is specified or it's 'all', use user's region
+        if (!whereConditions.regionId) {
+          whereConditions.regionId = user.regionId;
+        } else if (whereConditions.regionId !== user.regionId) {
+          // If user tries to access different region, restrict to their region
+          whereConditions.regionId = user.regionId;
+        }
       } else {
+        // Regular user can only see their own data
         whereConditions.userId = user.userId;
       }
     }
@@ -229,7 +235,9 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average note length
-    const avgNoteLength = catatanSurvei.reduce((sum, c) => sum + c.catatan.length, 0) / catatanSurvei.length;
+    const avgNoteLength = catatanSurvei.length > 0 
+      ? catatanSurvei.reduce((sum, c) => sum + c.catatan.length, 0) / catatanSurvei.length 
+      : 0;
 
     // Word cloud data (top 50 words for visualization)
     const wordCloudData = Object.entries(wordFrequency)

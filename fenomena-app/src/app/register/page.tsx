@@ -18,7 +18,7 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: '',
     regionId: '',
-    role: 'USER' as 'USER' | 'ADMIN',
+    role: 'USER' as const,
   });
   const [regions, setRegions] = useState<Region[]>([]);
   const [error, setError] = useState('');
@@ -181,21 +181,6 @@ export default function RegisterPage() {
               <p className="mt-1 text-xs text-gray-500">
                 Anda hanya dapat menginput fenomena di wilayah yang dipilih
               </p>
-            </div>
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                Role
-              </label>
-              <select
-                id="role"
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="USER">User</option>
-                <option value="ADMIN">Admin</option>
-              </select>
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">

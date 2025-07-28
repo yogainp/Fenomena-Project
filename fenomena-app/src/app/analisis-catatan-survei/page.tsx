@@ -48,6 +48,7 @@ export default function AnalisisCatatanSurveiPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState({
@@ -63,10 +64,10 @@ export default function AnalisisCatatanSurveiPage() {
   }, []);
 
   useEffect(() => {
-    if (categories.length > 0 || regions.length > 0 || periods.length > 0) {
+    if (initialDataLoaded) {
       fetchAnalysisData();
     }
-  }, [filters]);
+  }, [filters, initialDataLoaded]);
 
   const fetchInitialData = async () => {
     try {
@@ -91,8 +92,8 @@ export default function AnalisisCatatanSurveiPage() {
         setPeriods(periodsData.periods || periodsData);
       }
 
-      // Fetch analysis data after getting the initial data
-      fetchAnalysisData();
+      // Mark initial data as loaded and fetch analysis data
+      setInitialDataLoaded(true);
     } catch (error) {
       setError('Failed to load initial data');
       setLoading(false);
@@ -261,7 +262,7 @@ export default function AnalisisCatatanSurveiPage() {
           </div>
         </div>
 
-        {analysisData && (
+        {analysisData ? (
           <>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
@@ -416,6 +417,22 @@ export default function AnalisisCatatanSurveiPage() {
               </div>
             </div>
           </>
+        ) : !loading && (
+          <div className="bg-white p-12 rounded-lg shadow text-center">
+            <div className="text-gray-500 text-lg mb-4">
+              {analysisData && analysisData.totalCatatanSurvei === 0 
+                ? 'Tidak ada data catatan survei yang ditemukan untuk filter yang dipilih.'
+                : 'Memuat data analisis...'}
+            </div>
+            {analysisData && analysisData.totalCatatanSurvei === 0 && (
+              <button
+                onClick={resetFilters}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

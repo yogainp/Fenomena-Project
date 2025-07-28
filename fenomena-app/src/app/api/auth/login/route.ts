@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       email: user.email,
       role: user.role,
+      regionId: user.regionId,
     });
 
     const response = NextResponse.json(
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
           email: user.email,
           username: user.username,
           role: user.role,
+          regionId: user.regionId,
+          region: user.region,
         }
       },
       { status: 200 }
@@ -55,6 +58,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Validation failed', details: error.errors },
         { status: 400 }
+      );
+    }
+
+    // Handle unverified user error
+    if (error instanceof Error && error.message === 'UNVERIFIED_USER') {
+      return NextResponse.json(
+        { error: 'Akun Anda belum diverifikasi oleh admin. Silakan tunggu persetujuan admin.' },
+        { status: 403 }
       );
     }
 
