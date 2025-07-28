@@ -12,7 +12,8 @@
       "Bash(npm run:*)",
       "Bash(rm:*)",
       "Bash(cmd /c:*)",
-      "Bash(npx playwright:*)"
+      "Bash(npx playwright:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": []
   }

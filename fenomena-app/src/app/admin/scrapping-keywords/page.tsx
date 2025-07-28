@@ -75,20 +75,42 @@ export default function ScrappingKeywordsPage() {
       if (categoryFilter) params.append('category', categoryFilter);
       if (activeFilter) params.append('activeOnly', activeFilter);
       
+      console.log('Fetching keywords from API...');
       const response = await makeAuthenticatedRequest(`/api/admin/scrapping-keywords?${params.toString()}`);
+      console.log('API response status:', response.status);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch keywords');
+        console.error('API error response:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch keywords`);
       }
       
       const data: ApiResponse = await response.json();
-      setKeywords(data.keywords);
-      setPagination(data.pagination);
+      console.log('API success response:', data);
+      
+      setKeywords(data.keywords || []);
+      setPagination(data.pagination || {
+        currentPage: 1,
+        totalPages: 1,
+        totalKeywords: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
       
     } catch (err: any) {
-      setError(err.message);
       console.error('Fetch keywords error:', err);
+      setError(`Failed to load keywords: ${err.message}`);
+      
+      // Set fallback data to prevent crash
+      setKeywords([]);
+      setPagination({
+        currentPage: 1,
+        totalPages: 1,
+        totalKeywords: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
+      
     } finally {
       setLoading(false);
     }

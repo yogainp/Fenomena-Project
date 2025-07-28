@@ -54,38 +54,76 @@ export async function POST(request: NextRequest) {
 // GET /api/admin/scrapping-berita/execute - Get scraping status/statistics
 export async function GET(request: NextRequest) {
   try {
-    requireRole(request, 'ADMIN');
+    console.log('GET /api/admin/scrapping-berita/execute - Starting...');
+    
+    // Check authentication
+    const user = requireRole(request, 'ADMIN');
+    console.log('✓ User authenticated:', user.userId, user.role);
 
-    // Get scraping statistics
-    const [totalNews, todayNews, totalKeywords, activeKeywords] = await Promise.all([
-      prisma.scrappingBerita.count(),
-      prisma.scrappingBerita.count({
+    console.log('Fetching statistics...');
+    
+    // Get scraping statistics with individual error handling
+    let totalNews = 0;
+    let todayNews = 0;
+    let totalKeywords = 0;
+    let activeKeywords = 0;
+    
+    try {
+      totalNews = await prisma.scrappingBerita.count();
+      console.log('✓ Total news:', totalNews);
+    } catch (err) {
+      console.error('Error getting total news:', err);
+    }
+    
+    try {
+      todayNews = await prisma.scrappingBerita.count({
         where: {
           tanggalScrap: {
             gte: new Date(new Date().setHours(0, 0, 0, 0)),
           },
         },
-      }),
-      prisma.scrappingKeyword.count(),
-      prisma.scrappingKeyword.count({
+      });
+      console.log('✓ Today news:', todayNews);
+    } catch (err) {
+      console.error('Error getting today news:', err);
+    }
+    
+    try {
+      totalKeywords = await prisma.scrappingKeyword.count();
+      console.log('✓ Total keywords:', totalKeywords);
+    } catch (err) {
+      console.error('Error getting total keywords:', err);
+    }
+    
+    try {
+      activeKeywords = await prisma.scrappingKeyword.count({
         where: { isActive: true },
-      }),
-    ]);
+      });
+      console.log('✓ Active keywords:', activeKeywords);
+    } catch (err) {
+      console.error('Error getting active keywords:', err);
+    }
 
     // Get recent scraping activity
-    const recentNews = await prisma.scrappingBerita.findMany({
-      select: {
-        id: true,
-        judul: true,
-        portalBerita: true,
-        tanggalScrap: true,
-        matchedKeywords: true,
-      },
-      orderBy: { tanggalScrap: 'desc' },
-      take: 10,
-    });
+    let recentNews = [];
+    try {
+      recentNews = await prisma.scrappingBerita.findMany({
+        select: {
+          id: true,
+          judul: true,
+          portalBerita: true,
+          tanggalScrap: true,
+          matchedKeywords: true,
+        },
+        orderBy: { tanggalScrap: 'desc' },
+        take: 10,
+      });
+      console.log('✓ Recent news:', recentNews.length);
+    } catch (err) {
+      console.error('Error getting recent news:', err);
+    }
 
-    return NextResponse.json({
+    const response = {
       statistics: {
         totalNews,
         todayNews,
@@ -93,13 +131,21 @@ export async function GET(request: NextRequest) {
         activeKeywords,
       },
       recentActivity: recentNews,
-    });
+    };
+    
+    console.log('✓ Returning response:', JSON.stringify(response, null, 2));
+    return NextResponse.json(response);
 
   } catch (error: any) {
     console.error('Get scraping status error:', error);
+    console.error('Error stack:', error.stack);
+    
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error.message 
+    }, { status: 500 });
   }
 }

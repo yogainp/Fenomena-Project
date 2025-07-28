@@ -235,3 +235,85 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+// POST /api/analytics/text-analysis - Save analysis results for scrapping berita
+export async function POST(request: NextRequest) {
+  try {
+    const user = requireAuth(request);
+    console.log('Save analysis request by user:', user.userId);
+
+    const body = await request.json();
+    const { scrappingBeritaId, analysisType, results } = body;
+
+    // Validate required fields
+    if (!scrappingBeritaId || !analysisType || !results) {
+      return NextResponse.json({ 
+        error: 'Missing required fields: scrappingBeritaId, analysisType, results' 
+      }, { status: 400 });
+    }
+
+    // Validate analysisType
+    if (analysisType !== 'NEWS_SCRAPING_ANALYSIS') {
+      return NextResponse.json({ 
+        error: 'Invalid analysisType. Expected: NEWS_SCRAPING_ANALYSIS' 
+      }, { status: 400 });
+    }
+
+    // Check if scrapping berita exists
+    const scrappingBerita = await prisma.scrappingBerita.findUnique({
+      where: { id: scrappingBeritaId },
+    });
+
+    if (!scrappingBerita) {
+      return NextResponse.json({ 
+        error: 'Scrapping berita not found' 
+      }, { status: 404 });
+    }
+
+    // Check if analysis already exists for this berita
+    const existingAnalysis = await prisma.analysisResult.findFirst({
+      where: {
+        scrappingBeritaId: scrappingBeritaId,
+        analysisType: analysisType,
+      },
+    });
+
+    let analysisResult;
+
+    if (existingAnalysis) {
+      // Update existing analysis
+      analysisResult = await prisma.analysisResult.update({
+        where: { id: existingAnalysis.id },
+        data: {
+          results: results,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // Create new analysis
+      analysisResult = await prisma.analysisResult.create({
+        data: {
+          analysisType: analysisType,
+          results: results,
+          scrappingBeritaId: scrappingBeritaId,
+        },
+      });
+    }
+
+    return NextResponse.json({
+      message: 'Analysis saved successfully',
+      analysisId: analysisResult.id,
+      updated: !!existingAnalysis,
+    });
+
+  } catch (error: any) {
+    if (error.message.includes('required')) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    console.error('Save analysis error:', error);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error.message 
+    }, { status: 500 });
+  }
+}

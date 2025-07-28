@@ -6,12 +6,10 @@ async function seedScrappingKeywords() {
   console.log('Seeding default scrapping keywords...');
 
   const defaultKeywords = [
-    // Trend keywords (requested)
-    { keyword: 'peningkatan', category: 'trend', description: 'Menunjukkan kenaikan atau pertumbuhan' },
-    { keyword: 'penurunan', category: 'trend', description: 'Menunjukkan penurunan atau kemunduran' },
-    { keyword: 'naik', category: 'trend', description: 'Indikator kenaikan' },
-    { keyword: 'turun', category: 'trend', description: 'Indikator penurunan' },
-    { keyword: 'tumbuh', category: 'trend', description: 'Menunjukkan pertumbuhan' },
+    // Location keywords (requested)
+    { keyword: 'kapuas hulu', category: 'lokasi', description: 'Kabupaten Kapuas Hulu' },
+    { keyword: 'kubu raya', category: 'lokasi', description: 'Kabupaten Kubu Raya' },
+    { keyword: 'sujiwo', category: 'lokasi', description: 'Wilayah Sujiwo' },
     
     // Additional economic keywords
     { keyword: 'inflasi', category: 'ekonomi', description: 'Terkait dengan inflasi ekonomi' },

@@ -52,20 +52,40 @@ export default function ScrappingBeritaPage() {
       setLoading(true);
       setError('');
       
+      console.log('Fetching statistics from API...');
       const response = await makeAuthenticatedRequest('/api/admin/scrapping-berita/execute');
+      console.log('API response status:', response.status);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch statistics');
+        console.error('API error response:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch statistics`);
       }
       
       const data = await response.json();
-      setStatistics(data.statistics);
-      setRecentActivity(data.recentActivity);
+      console.log('API success response:', data);
+      
+      setStatistics(data.statistics || {
+        totalNews: 0,
+        todayNews: 0,
+        totalKeywords: 0,
+        activeKeywords: 0,
+      });
+      setRecentActivity(data.recentActivity || []);
       
     } catch (err: any) {
-      setError(err.message);
       console.error('Fetch statistics error:', err);
+      setError(`Failed to load statistics: ${err.message}`);
+      
+      // Set fallback data to prevent crash
+      setStatistics({
+        totalNews: 0,
+        todayNews: 0,
+        totalKeywords: 0,
+        activeKeywords: 0,
+      });
+      setRecentActivity([]);
+      
     } finally {
       setLoading(false);
     }

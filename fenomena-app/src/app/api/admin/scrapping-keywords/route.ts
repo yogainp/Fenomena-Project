@@ -20,7 +20,11 @@ const updateKeywordSchema = z.object({
 // GET /api/admin/scrapping-keywords - List all keywords
 export async function GET(request: NextRequest) {
   try {
-    requireRole(request, 'ADMIN');
+    console.log('GET /api/admin/scrapping-keywords - Starting...');
+    
+    // Check authentication
+    const user = requireRole(request, 'ADMIN');
+    console.log('✓ User authenticated:', user.userId, user.role);
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -28,6 +32,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
     const activeOnly = searchParams.get('activeOnly') === 'true';
+
+    console.log('Request parameters:', { page, limit, search, category, activeOnly });
 
     const skip = (page - 1) * limit;
 
@@ -49,9 +55,15 @@ export async function GET(request: NextRequest) {
       whereConditions.isActive = true;
     }
 
-    // Get keywords with pagination
-    const [keywords, totalKeywords] = await Promise.all([
-      prisma.scrappingKeyword.findMany({
+    console.log('Where conditions:', JSON.stringify(whereConditions, null, 2));
+
+    // Get keywords with individual error handling
+    let keywords = [];
+    let totalKeywords = 0;
+    
+    try {
+      console.log('Fetching keywords...');
+      keywords = await prisma.scrappingKeyword.findMany({
         where: whereConditions,
         orderBy: [
           { isActive: 'desc' },
@@ -60,13 +72,25 @@ export async function GET(request: NextRequest) {
         ],
         skip,
         take: limit,
-      }),
-      prisma.scrappingKeyword.count({ where: whereConditions }),
-    ]);
+      });
+      console.log('✓ Keywords fetched:', keywords.length);
+    } catch (err) {
+      console.error('Error fetching keywords:', err);
+      keywords = [];
+    }
+    
+    try {
+      console.log('Counting total keywords...');
+      totalKeywords = await prisma.scrappingKeyword.count({ where: whereConditions });
+      console.log('✓ Total keywords counted:', totalKeywords);
+    } catch (err) {
+      console.error('Error counting keywords:', err);
+      totalKeywords = 0;
+    }
 
     const totalPages = Math.ceil(totalKeywords / limit);
 
-    return NextResponse.json({
+    const response = {
       keywords,
       pagination: {
         currentPage: page,
@@ -75,14 +99,22 @@ export async function GET(request: NextRequest) {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
-    });
+    };
+
+    console.log('✓ Returning response:', JSON.stringify(response, null, 2));
+    return NextResponse.json(response);
 
   } catch (error: any) {
     console.error('Get keywords error:', error);
+    console.error('Error stack:', error.stack);
+    
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error.message 
+    }, { status: 500 });
   }
 }
 
