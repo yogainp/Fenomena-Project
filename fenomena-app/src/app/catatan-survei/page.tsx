@@ -66,7 +66,15 @@ interface ExistingDataInfo {
   }>;
 }
 
+interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  role: 'ADMIN' | 'USER';
+}
+
 export default function CatatanSurveiPage() {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [data, setData] = useState<CatatanSurvei[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -93,13 +101,57 @@ export default function CatatanSurveiPage() {
   const [filePreview, setFilePreview] = useState<string>('');
 
   useEffect(() => {
-    // Try to fetch initial data - if auth fails, it will be handled by makeAuthenticatedRequest
-    fetchInitialData();
+    // First check user role, then fetch data if admin
+    checkUserRoleAndFetchData();
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [page, search]);
+    if (userProfile?.role === 'ADMIN') {
+      fetchData();
+    }
+  }, [page, search, userProfile]);
+
+  const checkUserRoleAndFetchData = async () => {
+    try {
+      console.log('Checking user role...');
+      
+      // Fetch user profile to check role
+      const profileRes = await makeAuthenticatedRequest('/api/profile');
+      
+      if (profileRes.status === 401) {
+        console.log('Authentication failed, redirecting to login');
+        setError('❌ Sesi telah berakhir. Silakan login kembali.');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 3000);
+        return;
+      }
+      
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        setUserProfile(profile);
+        console.log('User profile loaded:', profile);
+        
+        // Check if user is admin
+        if (profile.role !== 'ADMIN') {
+          setError('❌ Akses ditolak. Halaman ini hanya dapat diakses oleh admin.');
+          setLoading(false);
+          return;
+        }
+        
+        // If admin, fetch initial data
+        await fetchInitialData();
+      } else {
+        console.error('Failed to load profile:', profileRes.status);
+        setError('Gagal memuat profil pengguna. Silakan refresh halaman.');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Failed to check user role:', error);
+      setError('Koneksi bermasalah saat memeriksa akses. Silakan periksa koneksi internet dan refresh halaman.');
+      setLoading(false);
+    }
+  };
 
   const fetchInitialData = async () => {
     try {
@@ -509,6 +561,50 @@ export default function CatatanSurveiPage() {
     }
   };
 
+  // Show access denied message if not admin
+  if (userProfile && userProfile.role !== 'ADMIN') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Back to Dashboard
+                </Link>
+                <h1 className="ml-4 text-xl font-semibold">Catatan Survei</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        <div className="max-w-4xl mx-auto py-12 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <div className="mb-6">
+              <svg className="mx-auto h-16 w-16 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Akses Ditolak</h2>
+            <p className="text-gray-600 mb-8">
+              Maaf, halaman Catatan Survei ini hanya dapat diakses oleh administrator.
+              <br />
+              Hubungi admin jika Anda memerlukan akses ke halaman ini.
+            </p>
+            <div className="space-x-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Kembali ke Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow">
@@ -518,14 +614,16 @@ export default function CatatanSurveiPage() {
               <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
                 ← Back to Dashboard
               </Link>
-              <h1 className="ml-4 text-xl font-semibold">Catatan Survei</h1>
+              <h1 className="ml-4 text-xl font-semibold">Catatan Survei (Admin Only)</h1>
             </div>
-            <Link
-              href="/catatan-survei/analisis"
-              className="flex items-center bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-            >
-              📊 Analisis Teks
-            </Link>
+            {userProfile?.role === 'ADMIN' && (
+              <Link
+                href="/analisis-catatan-survei"
+                className="flex items-center bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+              >
+                📊 Analisis Teks
+              </Link>
+            )}
           </div>
         </div>
       </nav>

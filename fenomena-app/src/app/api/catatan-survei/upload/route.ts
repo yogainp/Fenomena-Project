@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/middleware';
+import { requireRole } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    const user = requireRole(request, 'ADMIN');
     
     const formData = await request.formData();
     const file = formData.get('file') as File;

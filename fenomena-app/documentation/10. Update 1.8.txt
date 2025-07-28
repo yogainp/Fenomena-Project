@@ -1,0 +1,57 @@
+Rekap Perubahan - 28 Juli 2025
+
+  1. Fix Runtime Error pada Halaman /phenomena
+
+  File: src/app/phenomena/page.tsx
+  - Masalah: Error "Cannot read properties of undefined (reading 'map')"
+  - Perbaikan: Menambahkan null checking pada semua .map() calls:       
+    - categories?.map() dengan fallback || []
+    - periods?.map() dengan fallback || []
+    - regions?.map() dengan fallback || []
+    - phenomena?.length || 0 untuk count display
+    - !phenomena || phenomena.length === 0 untuk conditional rendering
+
+  2. Perbaikan Ukuran Tombol "Tambah Fenomena"
+
+  File: src/app/phenomena/page.tsx
+  - Masalah: Tombol terlalu besar dibanding tombol User Management, Profile, Logout
+  - Perbaikan:
+    - Ubah dari px-4 py-2 ke px-3 py-1 text-sm
+    - Ubah struktur dari <Link className="..."> ke <Link><button className="..."></Link>
+    - Tambah wrapper <div className="flex items-center"> untuk vertical centering
+
+  3. Fix Runtime Error pada Halaman Edit Fenomena
+
+  File: src/app/phenomena/edit/[id]/page.tsx
+  - Masalah: Error "Cannot read properties of undefined (reading 'map')"
+  - Perbaikan: Menambahkan null checking pada:
+    - categories?.map() dengan fallback || []
+    - periods?.map() dengan fallback || []
+    - Complex regions filter dengan null checking untuk admin/non-admin users
+
+  4. Fix Koneksi Dropdown Wilayah ke Database
+
+  Files yang diperbaiki:
+  - src/app/phenomena/page.tsx:95
+  - src/app/phenomena/edit/[id]/page.tsx:106
+  - src/app/phenomena/add/page.tsx:78
+  - src/app/catatan-survei/analisis/page.tsx:87
+  - Masalah: Dropdown wilayah tidak terhubung ke database karena mismatch struktur data
+  - Root Cause: API /api/regions mengembalikan array langsung, tapi frontend mengakses regionsData.regions
+  - Perbaikan: Ubah semua setRegions(regionsData.regions) menjadi setRegions(regionsData)
+
+  5. Konsistensi Error Handling
+
+  - Menambahkan consistent null checking pattern di seluruh aplikasi
+  - Memastikan tidak ada runtime error saat data sedang loading
+  - Fallback values untuk semua array operations
+
+  Summary
+
+  - 4 files diperbaiki untuk fix runtime errors
+  - 1 file diperbaiki untuk UI consistency
+  - Total 5 files yang dimodifikasi
+  - Semua perubahan bersifat defensive dan backward compatible
+  - Tidak ada breaking changes pada API atau database schema
+
+  Perubahan ini meningkatkan stability dan user experience aplikasi dengan menghilangkan runtime errors dan memperbaiki inconsistency dalam UI.

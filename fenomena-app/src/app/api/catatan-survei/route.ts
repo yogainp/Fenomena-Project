@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/middleware';
+import { requireRole } from '@/lib/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    const user = requireRole(request, 'ADMIN');
     
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -33,14 +33,7 @@ export async function GET(request: NextRequest) {
       whereConditions.regionId = regionId;
     }
     
-    // If user is not admin, only show their own data
-    if (user.role !== 'ADMIN') {
-      if (user.regionId) {
-        whereConditions.regionId = user.regionId;
-      } else {
-        whereConditions.userId = user.userId;
-      }
-    }
+    // Since this is admin-only, show all data
     
     const [catatanSurvei, totalCount] = await Promise.all([
       prisma.catatanSurvei.findMany({
@@ -113,7 +106,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    const user = requireRole(request, 'ADMIN');
     const body = await request.json();
     
     const { catatan, regionId, categoryId, periodId, nomorResponden } = body;
@@ -171,13 +164,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check if user can add to this region
-    if (user.role !== 'ADMIN' && user.regionId && user.regionId !== regionId) {
-      return NextResponse.json(
-        { error: 'Anda tidak dapat menambah catatan untuk wilayah ini' },
-        { status: 403 }
-      );
-    }
+    // Admin can add to any region
     
     // Generate respondenId  
     const respondenId = `${categoryId}-${periodId}-${nomorRespondenInt}`;

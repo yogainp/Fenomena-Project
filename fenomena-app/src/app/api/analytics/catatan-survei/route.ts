@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       whereConditions.periodId = periodId;
     }
 
-    // If user is not admin, restrict to their data
+    // If user is not admin, restrict to their data based on role
     if (user.role !== 'ADMIN') {
       if (user.regionId) {
         whereConditions.regionId = user.regionId;

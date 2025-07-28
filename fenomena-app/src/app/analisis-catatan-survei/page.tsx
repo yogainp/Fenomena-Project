@@ -41,8 +41,7 @@ interface Period {
   endDate: string;
 }
 
-
-export default function CatatanSurveiAnalysisPage() {
+export default function AnalisisCatatanSurveiPage() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);

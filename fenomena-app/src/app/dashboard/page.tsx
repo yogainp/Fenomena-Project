@@ -157,23 +157,25 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6 h-full flex flex-col">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Catatan Survei
-                </h3>
-                <p className="mt-2 text-sm text-gray-500 flex-1">
-                  Upload data survei CSV dan analisis teks
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <Link href="/catatan-survei">
-                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-                      Buka
-                    </button>
-                  </Link>
+            {user?.role === 'ADMIN' && (
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-6 h-full flex flex-col">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Catatan Survei
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500 flex-1">
+                    Upload data survei CSV dan analisis teks
+                  </p>
+                  <div className="mt-4 flex justify-end">
+                    <Link href="/catatan-survei">
+                      <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                        Buka
+                      </button>
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6 h-full flex flex-col">
@@ -184,7 +186,7 @@ export default function DashboardPage() {
                   Analisis teks dan visualisasi data catatan survei
                 </p>
                 <div className="mt-4 flex justify-end">
-                  <Link href="/catatan-survei/analisis">
+                  <Link href="/analisis-catatan-survei">
                     <button className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
                       Buka
                     </button>
