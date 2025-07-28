@@ -75,7 +75,7 @@ export default function AddPhenomenaPage() {
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions);
+        setRegions(regionsData);
       }
       
       if (userRes.ok) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/middleware';
+import * as XLSX from 'xlsx';
 
 const phenomenonSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -138,11 +139,35 @@ export async function GET(request: NextRequest) {
         case 'excel':
           filename += '.xlsx';
           contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          // For Excel, we'll return JSON and let the client handle conversion
-          // In a real implementation, you'd use a library like xlsx
-          return NextResponse.json({ 
-            error: 'Excel format not yet implemented. Please use CSV or JSON.' 
-          }, { status: 400 });
+          
+          // Create Excel workbook
+          const worksheet = XLSX.utils.json_to_sheet(exportData.map(row => ({
+            'ID': row.id,
+            'Judul': row.title,
+            'Deskripsi': row.description,
+            'Kategori': row.category,
+            'Periode': row.period,
+            'Wilayah': row.region,
+            'Provinsi': row.province,
+            'Kota': row.city,
+            'Kode Wilayah': row.regionCode,
+            'Pembuat': row.author,
+            'Tanggal Dibuat': new Date(row.createdAt).toLocaleDateString('id-ID')
+          })));
+          
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Fenomena');
+          
+          // Generate Excel file buffer
+          const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+          
+          return new NextResponse(excelBuffer, {
+            status: 200,
+            headers: {
+              'Content-Type': contentType,
+              'Content-Disposition': `attachment; filename="${filename}"`,
+            },
+          });
 
         default: // json
           filename += '.json';

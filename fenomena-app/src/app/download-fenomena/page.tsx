@@ -49,12 +49,11 @@ export default function DownloadFenomenaPage() {
   }, []);
 
   useEffect(() => {
-    if (filters.categoryId || filters.periodId || filters.regionId) {
+    // Always fetch preview count after metadata is loaded
+    if (!loading) {
       fetchPreviewCount();
-    } else {
-      setPreviewCount(null);
     }
-  }, [filters.categoryId, filters.periodId, filters.regionId]);
+  }, [filters.categoryId, filters.periodId, filters.regionId, loading]);
 
   const fetchMetadata = async () => {
     try {
@@ -100,7 +99,7 @@ export default function DownloadFenomenaPage() {
       const response = await makeAuthenticatedRequest(`/api/phenomena?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
-        setPreviewCount(data.count || data.length);
+        setPreviewCount(data.count || data.length || 0);
       }
     } catch (error) {
       console.error('Failed to fetch preview count:', error);
@@ -110,10 +109,8 @@ export default function DownloadFenomenaPage() {
   };
 
   const handleDownload = async () => {
-    if (!filters.categoryId && !filters.periodId && !filters.regionId) {
-      setError('Pilih minimal satu filter untuk download');
-      return;
-    }
+    // Download is always allowed - empty string means "Semua" which is valid
+    // No need for additional validation since API can handle empty filters
 
     try {
       setDownloading(true);
@@ -174,19 +171,32 @@ export default function DownloadFenomenaPage() {
 
   const getSelectedFiltersText = () => {
     const selected = [];
+    
+    // Category filter
     if (filters.categoryId) {
       const category = categories.find(c => c.id === filters.categoryId);
       if (category) selected.push(`Kategori: ${category.name}`);
+    } else {
+      selected.push('Kategori: Semua Kategori');
     }
+    
+    // Period filter
     if (filters.periodId) {
       const period = periods.find(p => p.id === filters.periodId);
       if (period) selected.push(`Periode: ${period.name}`);
+    } else {
+      selected.push('Periode: Semua Periode');
     }
+    
+    // Region filter
     if (filters.regionId) {
       const region = regions.find(r => r.id === filters.regionId);
       if (region) selected.push(`Wilayah: ${region.name}`);
+    } else {
+      selected.push('Wilayah: Semua Wilayah');
     }
-    return selected.length > 0 ? selected.join(', ') : 'Tidak ada filter dipilih';
+    
+    return selected.join(', ');
   };
 
   if (loading) {
@@ -334,8 +344,8 @@ export default function DownloadFenomenaPage() {
               <p><strong>Jumlah data:</strong> 
                 {previewLoading ? (
                   <span className="ml-2">Loading...</span>
-                ) : previewCount !== null ? (
-                  <span className="ml-2 font-semibold text-blue-600">{previewCount.toLocaleString()} fenomena</span>
+                ) : previewCount !== null && previewCount !== undefined ? (
+                  <span className="ml-2 font-semibold text-blue-600">{Number(previewCount).toLocaleString()} fenomena</span>
                 ) : (
                   <span className="ml-2 text-gray-400">Pilih filter untuk melihat jumlah data</span>
                 )}
@@ -348,7 +358,7 @@ export default function DownloadFenomenaPage() {
           <div className="flex justify-end">
             <button
               onClick={handleDownload}
-              disabled={downloading || (!filters.categoryId && !filters.periodId && !filters.regionId)}
+              disabled={downloading}
               className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               {downloading ? (

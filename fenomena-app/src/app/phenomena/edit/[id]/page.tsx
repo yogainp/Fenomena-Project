@@ -103,7 +103,7 @@ export default function EditPhenomenaPage() {
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions);
+        setRegions(regionsData);
       }
       
       if (userRes.ok) {
@@ -261,11 +261,11 @@ export default function EditPhenomenaPage() {
                   required
                 >
                   <option value="">Pilih Kategori</option>
-                  {categories.map((category) => (
+                  {categories?.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
-                  ))}
+                  )) || []}
                 </select>
               </div>
 
@@ -280,11 +280,11 @@ export default function EditPhenomenaPage() {
                   required
                 >
                   <option value="">Pilih Periode</option>
-                  {periods.map((period) => (
+                  {periods?.map((period) => (
                     <option key={period.id} value={period.id}>
                       {period.name}
                     </option>
-                  ))}
+                  )) || []}
                 </select>
               </div>
             </div>
@@ -303,11 +303,11 @@ export default function EditPhenomenaPage() {
                 disabled={currentUser?.role !== 'ADMIN'}
               >
                 <option value="">Pilih Wilayah</option>
-                {(currentUser?.role === 'ADMIN' ? regions : regions.filter(r => r.id === currentUser?.regionId)).map((region) => (
+                {(currentUser?.role === 'ADMIN' ? regions : regions?.filter(r => r.id === currentUser?.regionId) || [])?.map((region) => (
                   <option key={region.id} value={region.id}>
                     {region.city} - {region.province} ({region.regionCode})
                   </option>
-                ))}
+                )) || []}
               </select>
               {currentUser?.role !== 'ADMIN' && (
                 <p className="mt-2 text-sm text-gray-500">

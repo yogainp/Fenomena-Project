@@ -92,7 +92,7 @@ export default function PhenomenaPage() {
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions);
+        setRegions(regionsData);
       }
       
       await fetchPhenomena();
@@ -162,12 +162,13 @@ export default function PhenomenaPage() {
               </Link>
               <h1 className="ml-4 text-xl font-semibold">Kelola Fenomena</h1>
             </div>
-            <Link
-              href="/phenomena/add"
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 inline-block"
-            >
-              + Tambah Fenomena
-            </Link>
+            <div className="flex items-center">
+              <Link href="/phenomena/add">
+                <button className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">
+                  + Tambah Fenomena
+                </button>
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -193,11 +194,11 @@ export default function PhenomenaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Kategori</option>
-                {categories.map((category) => (
+                {categories?.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
-                ))}
+                )) || []}
               </select>
             </div>
             <div>
@@ -210,11 +211,11 @@ export default function PhenomenaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Periode</option>
-                {periods.map((period) => (
+                {periods?.map((period) => (
                   <option key={period.id} value={period.id}>
                     {period.name}
                   </option>
-                ))}
+                )) || []}
               </select>
             </div>
             <div>
@@ -227,11 +228,11 @@ export default function PhenomenaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Semua Wilayah</option>
-                {regions.map((region) => (
+                {regions?.map((region) => (
                   <option key={region.id} value={region.id}>
                     {region.city} - {region.province}
                   </option>
-                ))}
+                )) || []}
               </select>
             </div>
             <div>
@@ -252,10 +253,10 @@ export default function PhenomenaPage() {
         {/* Phenomena List */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold">Daftar Fenomena ({phenomena.length})</h2>
+            <h2 className="text-lg font-semibold">Daftar Fenomena ({phenomena?.length || 0})</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {phenomena.length === 0 ? (
+            {!phenomena || phenomena.length === 0 ? (
               <div className="px-6 py-12 text-center text-gray-500">
                 Belum ada fenomena yang tersedia
               </div>

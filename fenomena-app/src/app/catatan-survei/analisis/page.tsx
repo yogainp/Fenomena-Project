@@ -84,7 +84,7 @@ export default function CatatanSurveiAnalysisPage() {
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions || regionsData);
+        setRegions(regionsData);
       }
 
       if (periodsRes.ok) {

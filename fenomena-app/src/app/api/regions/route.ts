@@ -20,7 +20,16 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    return NextResponse.json(regions);
+    // Transform data to include 'name' field for frontend compatibility
+    const transformedRegions = regions.map(region => ({
+      id: region.id,
+      name: `${region.province} - ${region.city}`,
+      code: region.regionCode,
+      province: region.province,
+      city: region.city,
+    }));
+
+    return NextResponse.json(transformedRegions);
 
   } catch (error: any) {
     console.error('Get regions error:', error);
