@@ -9,6 +9,7 @@
     "lint": "next lint",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-more": "tsx prisma/seed-more-data.ts",
+    "db:seed-keywords": "tsx prisma/seed-scrapping-keywords.ts",
     "db:migrate": "npx prisma migrate dev && npm run server:restart",
     "server:restart": "node scripts/restart-server.js"
   },
@@ -20,6 +21,8 @@
     "bcryptjs": "^3.0.2",
     "jsonwebtoken": "^9.0.2",
     "next": "15.4.2",
+    "node-cron": "^4.2.1",
+    "playwright": "^1.54.1",
     "prisma": "^6.12.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",

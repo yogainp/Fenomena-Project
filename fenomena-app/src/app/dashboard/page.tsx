@@ -247,6 +247,36 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
+
+            {user?.role === 'ADMIN' && (
+              <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-3 xl:col-span-5">
+                <div className="p-6">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    News Scraping System
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Kelola scraping berita otomatis, analisis keyword, dan katalog berita hasil scraping
+                  </p>
+                  <div className="mt-4 space-x-4">
+                    <Link href="/admin/scrapping-berita">
+                      <button className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">
+                        Scraping Control
+                      </button>
+                    </Link>
+                    <Link href="/admin/scrapping-keywords">
+                      <button className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">
+                        Kelola Keywords
+                      </button>
+                    </Link>
+                    <Link href="/admin/katalog-berita">
+                      <button className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">
+                        Katalog Berita
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
