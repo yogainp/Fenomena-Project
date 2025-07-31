@@ -100,6 +100,187 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
   return result;
 }
 
+// Helper function to parse Indonesian date strings
+function parseIndonesianDate(dateString: string): Date {
+  if (!dateString) {
+    console.log('No date string provided, using current date');
+    return new Date();
+  }
+  
+  console.log(`=== PARSING DATE: "${dateString}" ===`);
+  
+  // Remove common prefixes and clean the string - more comprehensive
+  const cleanedDate = dateString
+    .replace(/^\s*(Dipublikasikan|Published|Tanggal|Date|Oleh|By|Posted|Diterbitkan|Terbit|Berita)[\s:]+/i, '')
+    .replace(/^\s*(pada|on|at|di|dalam)[\s:]+/i, '')
+    .replace(/^\s*(,|\-|\||–|—)\s*/g, '') // Remove leading separators
+    .replace(/\s+(WIB|WITA|WIT|GMT|UTC|\+\d{2}:\d{2}).*$/i, '') // Remove timezone info
+    .replace(/\s+pukul\s+\d{1,2}[:.]\d{2}.*$/i, '') // Remove time info like "pukul 14:30"
+    .replace(/\s+\d{1,2}[:.]\d{2}([:.]\d{2})?.*$/i, '') // Remove time info like "14:30:00"
+    .replace(/\s+jam\s+\d{1,2}[:.]\d{2}.*$/i, '') // Remove "jam 14:30"
+    .replace(/\s*\(\s*\d+\s*(hari|minggu|bulan|tahun)\s+.*?\)\s*/gi, '') // Remove relative dates in parentheses
+    .replace(/\s*-\s*\d+\s+(hari|minggu|bulan|tahun)\s+.*$/gi, '') // Remove "- 2 hari yang lalu" etc
+    .trim();
+  
+  console.log(`Cleaned date: "${cleanedDate}"`);
+  
+  // Indonesian month mapping - more comprehensive
+  const monthMap: { [key: string]: number } = {
+    'januari': 0, 'jan': 0, 'january': 0,
+    'februari': 1, 'feb': 1, 'pebruari': 1, 'february': 1,
+    'maret': 2, 'mar': 2, 'march': 2,
+    'april': 3, 'apr': 3,
+    'mei': 4, 'may': 4,
+    'juni': 5, 'jun': 5, 'june': 5,
+    'juli': 6, 'jul': 6, 'july': 6,
+    'agustus': 7, 'agu': 7, 'aug': 7, 'ags': 7, 'august': 7,
+    'september': 8, 'sep': 8, 'sept': 8,
+    'oktober': 9, 'okt': 9, 'oct': 9, 'october': 9,
+    'november': 10, 'nov': 10, 'nop': 10,
+    'desember': 11, 'des': 11, 'dec': 11, 'december': 11
+  };
+  
+  try {
+    // Try standard ISO format first (YYYY-MM-DDTHH:mm:ss)
+    const isoDate = new Date(cleanedDate);
+    if (!isNaN(isoDate.getTime()) && cleanedDate.includes('T') || cleanedDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+      console.log(`Parsed as ISO date: ${isoDate.toISOString()}`);
+      return new Date(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate());
+    }
+    
+    // Enhanced patterns for Indonesian dates - prioritized by common usage
+    const patterns = [
+      // ISO format with timezone: "2024-01-15T10:30:00+07:00"
+      /(\d{4})-(\d{1,2})-(\d{1,2})T\d{2}:\d{2}:\d{2}/,
+      // ISO format: "2024-01-15" 
+      /(\d{4})-(\d{1,2})-(\d{1,2})$/,
+      // DD Bulan YYYY (e.g., "15 Januari 2024", "15 Jan 2024") - Most common Indonesian format
+      /(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+      // Long format like "Senin, 15 Januari 2024" or "Kamis, 15 Jan 2024"
+      /\w+,?\s+(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+      // Format with time like "15 Januari 2024, 14:30"
+      /(\d{1,2})\s+(\w+)\s+(\d{4})[,\s]+\d{1,2}[:.]\d{2}/i,
+      // Bulan DD, YYYY (e.g., "Januari 15, 2024") - Less common but possible
+      /(\w+)\s+(\d{1,2}),?\s+(\d{4})/i,
+      // DD-MM-YYYY or DD/MM/YYYY (Indonesian format)
+      /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/,
+      // YYYY-MM-DD or YYYY/MM/DD (ISO format)
+      /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/,
+      // DD Bulan (current year) e.g., "15 Januari"
+      /(\d{1,2})\s+(\w+)$/i,
+      // Just year YYYY
+      /^(\d{4})$/
+    ];
+    
+    for (let i = 0; i < patterns.length; i++) {
+      const pattern = patterns[i];
+      const match = cleanedDate.match(pattern);
+      console.log(`Pattern ${i} (${pattern}): ${match ? 'MATCH' : 'no match'}`);
+      
+      if (match) {
+        console.log(`Pattern ${i} matched:`, match);
+        
+        let result: Date | null = null;
+        
+        if (i === 0) {
+          // ISO format with timezone: "2024-01-15T10:30:00+07:00"
+          const year = parseInt(match[1]);
+          const month = parseInt(match[2]) - 1; // Month is 0-indexed
+          const day = parseInt(match[3]);
+          
+          if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 1) {
+          // ISO format: "2024-01-15"
+          const year = parseInt(match[1]);
+          const month = parseInt(match[2]) - 1;
+          const day = parseInt(match[3]);
+          
+          if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 2 || i === 3 || i === 4) {
+          // DD Bulan YYYY format or variations (including with day names and time)
+          const day = parseInt(match[1]);
+          const monthName = match[2].toLowerCase();
+          const year = parseInt(match[3]) || new Date().getFullYear();
+          const month = monthMap[monthName];
+          
+          console.log(`Parsing Indonesian format: day=${day}, monthName=${monthName}, month=${month}, year=${year}`);
+          
+          if (month !== undefined && day >= 1 && day <= 31 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 5) {
+          // Bulan DD, YYYY format
+          const monthName = match[1].toLowerCase();
+          const day = parseInt(match[2]);
+          const year = parseInt(match[3]);
+          const month = monthMap[monthName];
+          
+          if (month !== undefined && day >= 1 && day <= 31 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 6) {
+          // DD-MM-YYYY format (Indonesian format)
+          const day = parseInt(match[1]);
+          const month = parseInt(match[2]) - 1; // Month is 0-indexed
+          const year = parseInt(match[3]);
+          
+          if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 7) {
+          // YYYY-MM-DD format
+          const year = parseInt(match[1]);
+          const month = parseInt(match[2]) - 1;
+          const day = parseInt(match[3]);
+          
+          if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && year >= 2000) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 8) {
+          // DD Bulan (current year)
+          const day = parseInt(match[1]);
+          const monthName = match[2].toLowerCase();
+          const year = new Date().getFullYear();
+          const month = monthMap[monthName];
+          
+          if (month !== undefined && day >= 1 && day <= 31) {
+            result = new Date(year, month, day);
+          }
+        } else if (i === 9) {
+          // Just year
+          const year = parseInt(match[1]);
+          if (year >= 2000 && year <= new Date().getFullYear() + 1) {
+            result = new Date(year, 0, 1); // January 1st of that year
+          }
+        }
+        
+        if (result) {
+          console.log(`✓ Successfully parsed with pattern ${i}: ${result.toISOString().split('T')[0]} (${result.toLocaleDateString('id-ID')})`);
+          return result;
+        } else {
+          console.log(`✗ Pattern ${i} matched but date validation failed`);
+        }
+      }
+    }
+    
+    // If all parsing failed, return current date
+    console.log(`⚠ FAILED to parse date: "${dateString}" (cleaned: "${cleanedDate}")`);
+    console.log(`Using current date as fallback: ${new Date().toISOString().split('T')[0]}`);
+    console.log('=== END DATE PARSING ===');
+    return new Date();
+    
+  } catch (error) {
+    console.log(`❌ ERROR parsing date: "${dateString}" - ${error}`);
+    console.log(`Using current date as fallback: ${new Date().toISOString().split('T')[0]}`);
+    console.log('=== END DATE PARSING ===');
+    return new Date();
+  }
+}
+
 // Helper function to clean content from CSS and unwanted elements
 function cleanContent(content: string): string {
   if (!content) return '';
@@ -326,24 +507,196 @@ async function scrapePontianakPost(
               console.log(`No content selector worked. Body text length: ${bodyText.length}, First 200 chars: ${bodyText.substring(0, 200)}`);
             }
 
-            // Try to extract date
+            // Debug: Let's capture ALL potential date elements for analysis
+            const allDateElements = [];
+            
+            // Comprehensive date selectors for debugging
+            const debugSelectors = [
+              // Time elements
+              'time',
+              '[datetime]',
+              // Common date classes
+              '.date', '.post-date', '.published-date', '.entry-date', '.meta-date',
+              // Meta sections
+              '.meta', '.post-meta', '.entry-meta', '.article-meta', '.meta-info',
+              '.post-info', '.article-info', '.byline', '.meta-data', '.post-details',
+              // Author/date sections
+              '.author-date', '.post-author', '.entry-author',
+              // Generic containers that might contain dates
+              '.post-header', '.entry-header', '.article-header',
+              '.post-footer', '.entry-footer', '.article-footer'
+            ];
+            
+            // Collect all elements for debugging
+            debugSelectors.forEach(selector => {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(el => {
+                const text = el.textContent?.trim() || '';
+                const datetime = el.getAttribute('datetime') || '';
+                const content = el.getAttribute('content') || '';
+                
+                if (text || datetime || content) {
+                  allDateElements.push({
+                    selector: selector,
+                    element: el.tagName + (el.className ? '.' + el.className.split(' ').join('.') : ''),
+                    text: text.substring(0, 100), // Limit length for debugging
+                    datetime: datetime,
+                    content: content,
+                    innerHTML: el.innerHTML?.substring(0, 200) || '' // First 200 chars of HTML
+                  });
+                }
+              });
+            });
+            
+            // Also check meta tags
+            const metaSelectors = [
+              'meta[property*="time"]',
+              'meta[property*="date"]', 
+              'meta[name*="date"]',
+              'meta[itemprop*="date"]',
+              'meta[property="article:published_time"]',
+              'meta[property="article:modified_time"]',
+              'meta[name="DC.date.issued"]',
+              'meta[itemprop="datePublished"]',
+              'meta[itemprop="dateModified"]'
+            ];
+            
+            metaSelectors.forEach(selector => {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(el => {
+                const content = el.getAttribute('content') || '';
+                const property = el.getAttribute('property') || el.getAttribute('name') || el.getAttribute('itemprop') || '';
+                if (content) {
+                  allDateElements.push({
+                    selector: selector,
+                    element: 'META',
+                    text: '',
+                    datetime: '',
+                    content: content,
+                    property: property
+                  });
+                }
+              });
+            });
+            
+            console.log('=== PONTIANAK POST DATE DEBUG ===');
+            console.log('URL:', window.location.href);
+            console.log('Title:', document.title);
+            console.log('All potential date elements found:', allDateElements);
+            
+            // Now try to find the best date using enhanced selectors - prioritized for Pontianak Post
             const dateSelectors = [
+              // Time elements with datetime attribute (highest priority)
+              'time[datetime]',
+              '[datetime]',
+              // Pontianak Post specific selectors
+              '.date-info',
+              '.publish-date',
+              '.article-date',
+              '.news-date',
+              // Common WordPress date selectors
               '.post-date',
-              '.published-date',
+              '.published-date', 
+              '.entry-date',
               '.date',
               'time',
               '.meta-date',
-              '[datetime]'
+              // Meta sections
+              '.post-meta', '.entry-meta', '.article-meta', '.meta-info',
+              '.post-info', '.article-info', '.byline',
+              // Author sections (often contain dates)
+              '.post-author', '.entry-author', '.author-date',
+              // Header/footer sections
+              '.post-header', '.entry-header', '.post-footer', '.entry-footer',
+              // Additional selectors for Pontianak Post
+              '.meta', '.meta-data', '.post-details',
+              'span[class*="date"]', 'div[class*="date"]',
+              '.content-meta', '.article-info'
             ];
 
             let dateString = '';
+            let foundSelector = '';
+            
             for (const selector of dateSelectors) {
-              const dateElement = document.querySelector(selector);
-              if (dateElement) {
-                dateString = dateElement.textContent?.trim() || dateElement.getAttribute('datetime') || '';
-                if (dateString) break;
+              const dateElements = document.querySelectorAll(selector);
+              
+              for (const dateElement of dateElements) {
+                // Try multiple ways to get date text
+                const potentialDate = dateElement.getAttribute('datetime') || 
+                                  dateElement.getAttribute('content') ||
+                                  dateElement.textContent?.trim() || '';
+                                  
+                if (potentialDate && potentialDate.length > 5) {
+                  // Check if this looks like a date - enhanced validation
+                  const hasNumbers = /\d/.test(potentialDate);
+                  const hasDateKeywords = /\b(20\d{2}|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(potentialDate);
+                  const hasDateFormats = potentialDate.includes('-') || potentialDate.includes('/') || potentialDate.includes('T') || potentialDate.includes(',');
+                  
+                  // Enhanced date pattern detection
+                  const commonDatePatterns = [
+                    /\d{1,2}[-\/]\d{1,2}[-\/]\d{4}/, // DD/MM/YYYY or DD-MM-YYYY
+                    /\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/, // YYYY/MM/DD or YYYY-MM-DD
+                    /\d{1,2}\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}/i, // DD Month YYYY
+                    /\d{1,2}:\d{2}/, // Has time (likely includes date too)
+                    /\b\d{4}\b/ // Has a year
+                  ];
+                  
+                  const matchesPattern = commonDatePatterns.some(pattern => pattern.test(potentialDate));
+                  
+                  if (hasNumbers && (hasDateKeywords || hasDateFormats || matchesPattern)) {
+                    // Additional check: exclude obviously non-date content
+                    const excludePatterns = [
+                      /^https?:\/\//, // URLs
+                      /^#/, // Hashtags
+                      /^\d+$/, // Just a number
+                      /views?/i, // View counts
+                      /share/i, // Share buttons
+                      /comment/i, // Comments
+                      /like/i // Likes
+                    ];
+                    
+                    const isExcluded = excludePatterns.some(pattern => pattern.test(potentialDate.trim()));
+                    
+                    if (!isExcluded) {
+                      dateString = potentialDate;
+                      foundSelector = selector;
+                      console.log(`Found date using selector "${selector}": ${dateString}`);
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              if (dateString) break;
+            }
+            
+            // If still no date found, try meta tags
+            if (!dateString) {
+              const metaSelectors = [
+                'meta[property="article:published_time"]',
+                'meta[property="article:modified_time"]',
+                'meta[name="DC.date.issued"]',
+                'meta[name="date"]',
+                'meta[itemprop="datePublished"]',
+                'meta[itemprop="dateModified"]'
+              ];
+              
+              for (const selector of metaSelectors) {
+                const metaElement = document.querySelector(selector);
+                if (metaElement) {
+                  const content = metaElement.getAttribute('content') || '';
+                  if (content) {
+                    dateString = content;
+                    foundSelector = selector;
+                    console.log(`Found date using meta selector "${selector}": ${dateString}`);
+                    break;
+                  }
+                }
               }
             }
+            
+            console.log('Final selected date:', dateString, 'from selector:', foundSelector);
+            console.log('=== END DATE DEBUG ===');
 
             // If still no content, try one last aggressive approach
             if (!content) {
@@ -389,15 +742,22 @@ async function scrapePontianakPost(
             };
           }, { articleTitle: article.title, articleLink: article.link });
 
-          // Parse date (fallback to current date if parsing fails)
+          // Parse date using enhanced Indonesian date parser
           let articleDate: Date;
-          try {
-            articleDate = articleData.dateString ? new Date(articleData.dateString) : new Date();
-            if (isNaN(articleDate.getTime())) {
-              articleDate = new Date(); // Fallback to current date
+          if (articleData.dateString) {
+            console.log(`\n🔍 Processing article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Raw date string found: "${articleData.dateString}"`);
+            articleDate = parseIndonesianDate(articleData.dateString);
+            const wasCurrentDate = Math.abs(articleDate.getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000; // Within 24 hours
+            if (wasCurrentDate) {
+              console.log(`⚠️  WARNING: Date parsing may have failed - using current date (${articleDate.toISOString().split('T')[0]})`);
+            } else {
+              console.log(`✅ Successfully parsed date: ${articleDate.toISOString().split('T')[0]} (${articleDate.toLocaleDateString('id-ID')})`);
             }
-          } catch {
-            articleDate = new Date(); // Fallback to current date
+          } else {
+            articleDate = new Date();
+            console.log(`\n❌ NO DATE FOUND for "${articleData.title.substring(0, 60)}..."`);
+            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
           }
 
           // Find matched keywords
@@ -699,23 +1059,78 @@ async function scrapeKalbarOnline(
               }
             }
 
-            // Try to extract date
+            // Try to extract date - Enhanced selectors for Kalbar Online
             const dateSelectors = [
+              // Common WordPress date selectors  
               '.post-date',
               '.published-date',
+              '.entry-date',
               '.date',
               'time',
               '.meta-date',
               '[datetime]',
-              '.entry-date'
+              // Kalbar Online specific selectors
+              '.post-meta .date',
+              '.entry-meta .date',
+              '.article-meta .date',
+              '.meta-info .date',
+              '.post-meta time',
+              '.entry-meta time',
+              '.article-meta time',
+              '.post-info time',
+              // More generic selectors
+              '.meta time',
+              '.byline time',
+              '.post-info .date',
+              '.article-info .date',
+              '.meta-data',
+              '.post-details',
+              '.article-details',
+              // Author and date info
+              '.author-date',
+              '.post-author-date',
+              '.entry-author-date'
             ];
 
             let dateString = '';
             for (const selector of dateSelectors) {
               const dateElement = document.querySelector(selector);
               if (dateElement) {
-                dateString = dateElement.textContent?.trim() || dateElement.getAttribute('datetime') || '';
-                if (dateString) break;
+                // Try multiple ways to get date text
+                dateString = dateElement.getAttribute('datetime') || 
+                           dateElement.getAttribute('content') ||
+                           dateElement.textContent?.trim() || '';
+                           
+                if (dateString && dateString.length > 5) { // Must be substantial
+                  console.log(`Found date using selector "${selector}": ${dateString}`);
+                  break;
+                }
+              }
+            }
+            
+            // If no date found with specific selectors, try broader search for Kalbar Online
+            if (!dateString) {
+              const broadSelectors = [
+                'meta[property="article:published_time"]',
+                'meta[name="DC.date.issued"]',
+                'meta[name="date"]',
+                'meta[itemprop="datePublished"]',
+                '[itemprop="datePublished"]',
+                'meta[property="og:updated_time"]',
+                'meta[name="article:published_time"]'
+              ];
+              
+              for (const selector of broadSelectors) {
+                const metaElement = document.querySelector(selector);
+                if (metaElement) {
+                  dateString = metaElement.getAttribute('content') ||
+                             metaElement.getAttribute('datetime') ||
+                             metaElement.textContent?.trim() || '';
+                  if (dateString) {
+                    console.log(`Found date using meta selector "${selector}": ${dateString}`);
+                    break;
+                  }
+                }
               }
             }
 
@@ -727,15 +1142,22 @@ async function scrapeKalbarOnline(
             };
           }, { articleTitle: article.title, articleLink: article.link });
 
-          // Parse date (fallback to current date if parsing fails)
+          // Parse date using enhanced Indonesian date parser
           let articleDate: Date;
-          try {
-            articleDate = articleData.dateString ? new Date(articleData.dateString) : new Date();
-            if (isNaN(articleDate.getTime())) {
-              articleDate = new Date(); // Fallback to current date
+          if (articleData.dateString) {
+            console.log(`\n🔍 Processing article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Raw date string found: "${articleData.dateString}"`);
+            articleDate = parseIndonesianDate(articleData.dateString);
+            const wasCurrentDate = Math.abs(articleDate.getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000; // Within 24 hours
+            if (wasCurrentDate) {
+              console.log(`⚠️  WARNING: Date parsing may have failed - using current date (${articleDate.toISOString().split('T')[0]})`);
+            } else {
+              console.log(`✅ Successfully parsed date: ${articleDate.toISOString().split('T')[0]} (${articleDate.toLocaleDateString('id-ID')})`);
             }
-          } catch {
-            articleDate = new Date(); // Fallback to current date
+          } else {
+            articleDate = new Date();
+            console.log(`\n❌ NO DATE FOUND for "${articleData.title.substring(0, 60)}..."`);
+            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
           }
 
           // Find matched keywords
