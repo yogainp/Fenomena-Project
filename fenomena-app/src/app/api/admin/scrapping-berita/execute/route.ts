@@ -7,7 +7,8 @@ import { z } from 'zod';
 // Allowed portals
 const ALLOWED_PORTALS = [
   'https://pontianakpost.jawapos.com/daerah',
-  'https://kalbaronline.com/berita-daerah/'
+  'https://kalbaronline.com/berita-daerah/',
+  'https://kalbar.antaranews.com/kalbar'
 ];
 
 const executeScrapingSchema = z.object({

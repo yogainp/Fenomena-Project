@@ -54,6 +54,11 @@ export default function ScrappingBeritaPage() {
       name: 'Kalbar Online',
       url: 'https://kalbaronline.com/berita-daerah/',
       description: 'Portal berita daerah Kalbar Online'
+    },
+    {
+      name: 'Antara News Kalbar',
+      url: 'https://kalbar.antaranews.com/kalbar',
+      description: 'Portal berita Antara News Kalimantan Barat'
     }
   ];
 

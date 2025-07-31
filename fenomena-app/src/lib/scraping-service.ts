@@ -80,8 +80,10 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
       await scrapePontianakPost(page, portalUrl, maxPages, delayMs, keywordList, result);
     } else if (portalUrl.includes('kalbaronline.com')) {
       await scrapeKalbarOnline(page, portalUrl, maxPages, delayMs, keywordList, result);
+    } else if (portalUrl.includes('kalbar.antaranews.com')) {
+      await scrapeAntaraNews(page, portalUrl, maxPages, delayMs, keywordList, result);
     } else {
-      throw new Error('Unsupported portal. Currently only supports pontianakpost.jawapos.com and kalbaronline.com');
+      throw new Error('Unsupported portal. Currently only supports pontianakpost.jawapos.com, kalbaronline.com, and kalbar.antaranews.com');
     }
 
     result.success = true;
@@ -1241,6 +1243,420 @@ async function scrapeKalbarOnline(
     } catch (pageError: unknown) {
       const errorMessage = pageError instanceof Error ? pageError.message : 'Unknown page error';
       console.error(`Error scraping Kalbar Online page ${currentPage}:`, errorMessage);
+      result.errors.push(`Page ${currentPage} error: ${errorMessage}`);
+      break; // Stop pagination on page error
+    }
+  }
+}
+
+async function scrapeAntaraNews(
+  page: Page, 
+  baseUrl: string, 
+  maxPages: number, 
+  delayMs: number,
+  keywords: string[],
+  result: ScrapingResult
+): Promise<void> {
+  let currentPage = 1;
+
+  while (currentPage <= maxPages) {
+    try {
+      const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}/${currentPage}`;
+      console.log(`Scraping Antara News page ${currentPage}: ${pageUrl}`);
+
+      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      
+      // Wait for page content to load
+      await page.waitForLoadState('domcontentloaded');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for dynamic content
+      
+      // Extract article links and titles for Antara News
+      const articles = await page.evaluate(() => {
+        const articles = [];
+        
+        // Try different selectors for Antara News
+        const selectors = [
+          // Main article containers
+          'article',
+          '.berita',
+          '.news-item',
+          '.post',
+          '.entry',
+          '.item',
+          // Links to articles
+          'a[href*="/berita/"]',
+          'a[href*="/news/"]',
+          // General containers
+          'div[class*="item"]',
+          'div[class*="post"]',
+          'div[class*="article"]'
+        ];
+        
+        let articleElements: NodeListOf<Element> | null = null;
+        
+        // First try to find article containers
+        for (const selector of selectors) {
+          if (selector.startsWith('a[')) continue; // Skip link selectors for now
+          const elements = document.querySelectorAll(selector);
+          if (elements.length > 0) {
+            articleElements = elements;
+            console.log(`Found ${elements.length} articles using selector: ${selector}`);
+            break;
+          }
+        }
+        
+        if (articleElements && articleElements.length > 0) {
+          // Process article containers
+          for (const element of articleElements) {
+            let titleElement, linkElement;
+            
+            // Look for title and link within each container
+            const titleSelectors = [
+              'h1 a', 'h2 a', 'h3 a', 'h4 a',
+              '.title a', '.headline a',
+              'a[href*="/berita/"]',
+              'a[href*="/news/"]',
+              'a[title]'
+            ];
+            
+            for (const titleSelector of titleSelectors) {
+              titleElement = element.querySelector(titleSelector);
+              if (titleElement) {
+                linkElement = titleElement;
+                break;
+              }
+            }
+            
+            if (titleElement && linkElement) {
+              const title = titleElement.textContent?.trim() || titleElement.getAttribute('title')?.trim();
+              const href = linkElement.getAttribute('href');
+              
+              if (title && href && title.length > 10) {
+                articles.push({
+                  title,
+                  link: href.startsWith('http') ? href : 'https://kalbar.antaranews.com' + href,
+                });
+              }
+            }
+          }
+        }
+        
+        // If no articles found using containers, try direct link approach
+        if (articles.length === 0) {
+          const linkSelectors = [
+            'a[href*="/berita/"]',
+            'a[href*="/news/"]',
+            'h2 a', 'h3 a', 'h4 a',
+            'a[title]'
+          ];
+          
+          for (const linkSelector of linkSelectors) {
+            const linkElements = document.querySelectorAll(linkSelector);
+            if (linkElements.length > 0) {
+              console.log(`Found ${linkElements.length} article links using selector: ${linkSelector}`);
+              
+              linkElements.forEach(linkEl => {
+                const title = linkEl.textContent?.trim() || linkEl.getAttribute('title')?.trim();
+                const href = linkEl.getAttribute('href');
+                
+                if (title && href && title.length > 10 && href.includes('/berita/')) {
+                  articles.push({
+                    title,
+                    link: href.startsWith('http') ? href : 'https://kalbar.antaranews.com' + href,
+                  });
+                }
+              });
+              break;
+            }
+          }
+        }
+
+        return articles;
+      });
+
+      console.log(`Found ${articles.length} articles on Antara News page ${currentPage}`);
+      
+      // Filter articles by keywords in title
+      const relevantArticles = articles.filter(article => 
+        keywords.some(keyword => 
+          article.title.toLowerCase().includes(keyword)
+        )
+      );
+
+      console.log(`Found ${relevantArticles.length} relevant articles (containing keywords)`);
+      
+      // If no articles found at all, might be end of content or blocked
+      if (articles.length === 0) {
+        console.log(`No articles found on page ${currentPage}, stopping pagination`);
+        break;
+      }
+
+      // Scrape content from relevant articles
+      for (const article of relevantArticles) {
+        try {
+          await page.goto(article.link, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await new Promise(resolve => setTimeout(resolve, delayMs)); // Rate limiting
+
+          // Extract article content from Antara News
+          const articleData = await page.evaluate(({ articleTitle, articleLink }) => {
+            // Content selectors for Antara News
+            const contentSelectors = [
+              '.article-content',
+              '.post-content', 
+              '.entry-content',
+              '.content',
+              '.news-content',
+              '.story-content',
+              '.article-body',
+              '.post-body',
+              '.main-content',
+              '.text-content',
+              
+              // Generic selectors
+              'article .content',
+              'main .content',
+              'article p',
+              '.content p',
+              'main p',
+              'p'
+            ];
+
+            let content = '';
+            
+            for (const selector of contentSelectors) {
+              const contentElement = document.querySelector(selector);
+              if (contentElement) {
+                let tempContent = '';
+                
+                // If selector targets paragraphs, collect all paragraph text
+                if (selector.includes('p')) {
+                  const paragraphs = document.querySelectorAll(selector);
+                  tempContent = Array.from(paragraphs)
+                    .map(p => {
+                      // Remove any style attributes and unwanted elements
+                      const pClone = p.cloneNode(true) as Element;
+                      pClone.querySelectorAll('style, script, noscript, .advertisement, .ads').forEach(el => el.remove());
+                      pClone.removeAttribute('style');
+                      return pClone.textContent?.trim();
+                    })
+                    .filter(text => text && text.length > 20) // Filter out short paragraphs
+                    .join(' ');
+                } else {
+                  // Clone the element and clean it
+                  const contentClone = contentElement.cloneNode(true) as Element;
+                  contentClone.querySelectorAll('style, script, noscript, .advertisement, .ads, .social').forEach(el => el.remove());
+                  contentClone.removeAttribute('style');
+                  tempContent = contentClone.textContent?.trim() || '';
+                }
+                
+                if (tempContent.length > 100) { // Use the selector that gives substantial content
+                  content = tempContent;
+                  break;
+                }
+              }
+            }
+
+            // Try to extract date - Enhanced selectors for Antara News
+            const dateSelectors = [
+              // Time elements with datetime attribute (highest priority)
+              'time[datetime]',
+              '[datetime]',
+              // Common date selectors
+              '.date',
+              '.post-date',
+              '.published-date',
+              '.entry-date',
+              '.article-date',
+              '.news-date',
+              'time',
+              '.meta-date',
+              // Meta sections
+              '.post-meta', 
+              '.entry-meta', 
+              '.article-meta', 
+              '.meta-info',
+              '.post-info', 
+              '.article-info', 
+              '.byline',
+              // JSON-LD structured data
+              'script[type="application/ld+json"]'
+            ];
+
+            let dateString = '';
+            
+            for (const selector of dateSelectors) {
+              if (selector === 'script[type="application/ld+json"]') {
+                // Handle JSON-LD structured data
+                const scripts = document.querySelectorAll(selector);
+                for (const script of scripts) {
+                  try {
+                    const jsonData = JSON.parse(script.textContent || '');
+                    if (jsonData.datePublished) {
+                      dateString = jsonData.datePublished;
+                      console.log(`Found date from JSON-LD: ${dateString}`);
+                      break;
+                    }
+                  } catch (e) {
+                    // Ignore JSON parse errors
+                  }
+                }
+              } else {
+                const dateElements = document.querySelectorAll(selector);
+                for (const dateElement of dateElements) {
+                  // Try multiple ways to get date text
+                  const potentialDate = dateElement.getAttribute('datetime') || 
+                                    dateElement.getAttribute('content') ||
+                                    dateElement.textContent?.trim() || '';
+                                    
+                  if (potentialDate && potentialDate.length > 5) {
+                    // Check if this looks like a date
+                    const hasNumbers = /\d/.test(potentialDate);
+                    const hasDateKeywords = /\b(20\d{2}|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(potentialDate);
+                    const hasDateFormats = potentialDate.includes('-') || potentialDate.includes('/') || potentialDate.includes('T') || potentialDate.includes(',');
+                    
+                    if (hasNumbers && (hasDateKeywords || hasDateFormats)) {
+                      dateString = potentialDate;
+                      console.log(`Found date using selector "${selector}": ${dateString}`);
+                      break;
+                    }
+                  }
+                }
+              }
+              
+              if (dateString) break;
+            }
+            
+            // If no date found with specific selectors, try meta tags
+            if (!dateString) {
+              const metaSelectors = [
+                'meta[property="article:published_time"]',
+                'meta[property="article:modified_time"]',
+                'meta[name="DC.date.issued"]',
+                'meta[name="date"]',
+                'meta[itemprop="datePublished"]',
+                'meta[itemprop="dateModified"]'
+              ];
+              
+              for (const selector of metaSelectors) {
+                const metaElement = document.querySelector(selector);
+                if (metaElement) {
+                  const content = metaElement.getAttribute('content') || '';
+                  if (content) {
+                    dateString = content;
+                    console.log(`Found date using meta selector "${selector}": ${dateString}`);
+                    break;
+                  }
+                }
+              }
+            }
+
+            return {
+              title: articleTitle,
+              content: content || 'Content could not be extracted',
+              link: articleLink,
+              dateString,
+            };
+          }, { articleTitle: article.title, articleLink: article.link });
+
+          // Parse date using enhanced Indonesian date parser
+          let articleDate: Date;
+          if (articleData.dateString) {
+            console.log(`\n🔍 Processing Antara News article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Raw date string found: "${articleData.dateString}"`);
+            articleDate = parseIndonesianDate(articleData.dateString);
+            const wasCurrentDate = Math.abs(articleDate.getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000; // Within 24 hours
+            if (wasCurrentDate) {
+              console.log(`⚠️  WARNING: Date parsing may have failed - using current date (${articleDate.toISOString().split('T')[0]})`);
+            } else {
+              console.log(`✅ Successfully parsed date: ${articleDate.toISOString().split('T')[0]} (${articleDate.toLocaleDateString('id-ID')})`);
+            }
+          } else {
+            articleDate = new Date();
+            console.log(`\n❌ NO DATE FOUND for Antara News "${articleData.title.substring(0, 60)}..."`);
+            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
+          }
+
+          // Find matched keywords
+          const matchedKeywords = keywords.filter(keyword => 
+            articleData.title.toLowerCase().includes(keyword) || 
+            articleData.content.toLowerCase().includes(keyword)
+          );
+
+          if (matchedKeywords.length > 0) {
+            const scrapedItem: ScrapedNewsItem = {
+              title: articleData.title,
+              content: cleanContent(articleData.content),
+              link: articleData.link,
+              date: articleDate,
+              portal: 'kalbar.antaranews.com',
+              matchedKeywords,
+            };
+
+            // Generate unique ID for the news
+            const idBerita = `an_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            // Try to save to database
+            try {
+              await prisma.scrappingBerita.create({
+                data: {
+                  idBerita,
+                  portalBerita: scrapedItem.portal,
+                  linkBerita: scrapedItem.link,
+                  judul: scrapedItem.title,
+                  isi: scrapedItem.content,
+                  tanggalBerita: scrapedItem.date,
+                  matchedKeywords: scrapedItem.matchedKeywords,
+                },
+              });
+
+              // Update keyword match counts
+              await prisma.scrappingKeyword.updateMany({
+                where: { keyword: { in: scrapedItem.matchedKeywords } },
+                data: { matchCount: { increment: 1 } },
+              });
+
+              result.newItems++;
+              result.scrapedItems.push(scrapedItem);
+              console.log(`✓ Saved from Antara News: ${scrapedItem.title.substring(0, 50)}...`);
+
+            } catch (dbError: unknown) {
+              if ((dbError as { code?: string }).code === 'P2002') {
+                result.duplicates++;
+                console.log(`⚠ Duplicate from Antara News: ${scrapedItem.title.substring(0, 50)}...`);
+              } else {
+                const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+                result.errors.push(`Database error: ${errorMessage}`);
+                console.error('Database error:', dbError);
+              }
+            }
+
+            result.totalScraped++;
+          }
+
+        } catch (articleError: unknown) {
+          const errorMessage = articleError instanceof Error ? articleError.message : 'Unknown article error';
+          console.error(`Error scraping Antara News article ${article.link}:`, errorMessage);
+          result.errors.push(`Article error: ${errorMessage}`);
+        }
+      }
+
+      // Check if we should continue to next page - Antara News pagination
+      const hasNextPage = await page.evaluate((currentPage) => {
+        const nextButton = document.querySelector('.next, .next-page, a[href*="/' + (currentPage + 1) + '"], .pagination .next');
+        return nextButton && !nextButton.classList.contains('disabled');
+      }, currentPage);
+
+      if (!hasNextPage) {
+        console.log('No more pages found on Antara News, stopping pagination');
+        break;
+      }
+
+      currentPage++;
+      await new Promise(resolve => setTimeout(resolve, delayMs)); // Rate limiting between pages
+
+    } catch (pageError: unknown) {
+      const errorMessage = pageError instanceof Error ? pageError.message : 'Unknown page error';
+      console.error(`Error scraping Antara News page ${currentPage}:`, errorMessage);
       result.errors.push(`Page ${currentPage} error: ${errorMessage}`);
       break; // Stop pagination on page error
     }

@@ -1,0 +1,23 @@
+  ✅ Masalah Teratasi: Validation Failed
+
+  Penyebab masalah:
+  - URL https://kalbar.antaranews.com/kalbar tidak terdaftar dalam array ALLOWED_PORTALS di sistem validasi
+  - Validasi Zod schema menolak URL yang tidak ada dalam daftar yang diizinkan
+
+  Perbaikan yang dilakukan:
+  - ✅ Menambahkan 'https://kalbar.antaranews.com/kalbar' ke dalam array ALLOWED_PORTALS di file src/app/api/admin/scrapping-berita/execute/route.ts
+
+  🧪 Cara Test:
+
+  1. Buka halaman admin scraping berita
+  2. Pilih "Antara News Kalbar" dari dropdown portal
+  3. Klik tombol "Mulai Scraping"
+  4. Sekarang tidak akan muncul error "Validation failed" lagi
+
+  📋 Daftar Portal yang Sekarang Didukung:
+
+  1. Pontianak Post: https://pontianakpost.jawapos.com/daerah
+  2. Kalbar Online: https://kalbaronline.com/berita-daerah/
+  3. Antara News Kalbar: https://kalbar.antaranews.com/kalbar ✨ BARU
+
+  Sekarang sistem scraping Antara News Kalbar sudah siap digunakan dan tidak akan menampilkan pesan "Validation failed" lagi!

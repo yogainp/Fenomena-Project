@@ -1,0 +1,43 @@
+ Perbaikan yang Dilakukan:
+
+  1. Enhanced Date Selectors (line 561-588)
+
+  - Menambahkan selector khusus untuk Pontianak Post: .date-info, .publish-date, .article-date, .news-date  
+  - Menambahkan selector generik tambahan: span[class*="date"], div[class*="date"], .content-meta
+
+  2. Improved Date Validation (line 603-640)
+
+  - Enhanced pattern detection dengan regex yang lebih comprehensive
+  - Validasi untuk mengecualikan content yang bukan tanggal (URLs, hashtags, view counts, dll.)
+  - Pattern detection untuk format: DD/MM/YYYY, YYYY-MM-DD, DD Month YYYY, dll.
+
+  3. Enhanced Indonesian Date Parser (line 104-282)
+
+  - Pembersihan string tanggal yang lebih comprehensive (timezone, time, relative dates)
+  - Pattern matching yang diprioritaskan: ISO format → Indonesian format → fallbacks
+  - Mapping bulan Indonesia yang lebih lengkap (termasuk English equivalents)
+  - Support untuk format: 2024-01-15T10:30:00+07:00, 15 Januari 2024, Senin, 15 Jan 2024, dll.
+
+  4. Better Logging & Monitoring (line 696-710, 1096-1110)
+
+  - Logging yang jelas dengan emoji untuk mudah dibaca di console
+  - Warning ketika parsing gagal dan fallback ke current date
+  - Info parsing success dengan format Indonesia dan ISO
+
+  5. Database Compatibility
+
+  - Format Date object sudah sesuai dengan schema DateTime di database
+  - Tidak ada perubahan pada struktur penyimpanan, hanya perbaikan parsing
+
+  Fitur Debugging yang Tersedia:
+
+  Kode sekarang memiliki comprehensive debugging di line 555-636 yang akan menampilkan:
+  - Semua elemen potensial yang mengandung tanggal
+  - Selector mana yang berhasil menemukan tanggal
+  - Proses parsing step-by-step
+  - Warning jika parsing gagal
+
+  Dengan perbaikan ini, sistem scraping akan:
+  1. Lebih akurat dalam mendeteksi tanggal publish dari berbagai format di pontianakpost
+  2. Memberikan feedback yang jelas ketika tanggal berhasil/gagal diparse
+  3. Menggunakan tanggal publish asli daripada tanggal scraping sebagai fallback yang lebih baik
