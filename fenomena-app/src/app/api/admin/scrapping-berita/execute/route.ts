@@ -4,8 +4,19 @@ import { requireRole } from '@/lib/middleware';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
 import { z } from 'zod';
 
+// Allowed portals
+const ALLOWED_PORTALS = [
+  'https://pontianakpost.jawapos.com/daerah',
+  'https://kalbaronline.com/berita-daerah/'
+];
+
 const executeScrapingSchema = z.object({
-  portalUrl: z.string().url('Invalid portal URL'),
+  portalUrl: z.string().url('Invalid portal URL').refine(
+    (url) => ALLOWED_PORTALS.includes(url),
+    {
+      message: `Portal URL must be one of: ${ALLOWED_PORTALS.join(', ')}`
+    }
+  ),
   maxPages: z.number().min(1).max(50).optional().default(10),
   delayMs: z.number().min(1000).max(10000).optional().default(2000),
 });

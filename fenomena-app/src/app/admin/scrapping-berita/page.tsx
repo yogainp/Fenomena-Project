@@ -43,6 +43,20 @@ export default function ScrappingBeritaPage() {
     delayMs: 2000,
   });
 
+  // Available portals for dropdown
+  const availablePortals = [
+    {
+      name: 'Pontianak Post',
+      url: 'https://pontianakpost.jawapos.com/daerah',
+      description: 'Portal berita daerah Pontianak Post'
+    },
+    {
+      name: 'Kalbar Online',
+      url: 'https://kalbaronline.com/berita-daerah/',
+      description: 'Portal berita daerah Kalbar Online'
+    }
+  ];
+
   useEffect(() => {
     fetchStatistics();
   }, []);
@@ -73,9 +87,10 @@ export default function ScrappingBeritaPage() {
       });
       setRecentActivity(data.recentActivity || []);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Fetch statistics error:', err);
-      setError(`Failed to load statistics: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to load statistics: ${errorMessage}`);
       
       // Set fallback data to prevent crash
       setStatistics({
@@ -119,8 +134,9 @@ export default function ScrappingBeritaPage() {
         setError(`Scraping completed with errors: ${data.result.errors.join(', ')}`);
       }
       
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
     } finally {
       setScraping(false);
     }
@@ -233,7 +249,7 @@ export default function ScrappingBeritaPage() {
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Today's News</dt>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Today&apos;s News</dt>
                       <dd className="text-lg font-medium text-gray-900">{statistics.todayNews}</dd>
                     </dl>
                   </div>
@@ -288,14 +304,22 @@ export default function ScrappingBeritaPage() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Portal URL</label>
-                <input
-                  type="url"
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Portal</label>
+                <select
                   value={scrapingConfig.portalUrl}
                   onChange={(e) => setScrapingConfig({ ...scrapingConfig, portalUrl: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   disabled={scraping}
-                />
+                >
+                  {availablePortals.map((portal, index) => (
+                    <option key={index} value={portal.url}>
+                      {portal.name} - {portal.description}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-sm text-gray-500">
+                  Selected: {availablePortals.find(p => p.url === scrapingConfig.portalUrl)?.url}
+                </p>
               </div>
               
               <div>
