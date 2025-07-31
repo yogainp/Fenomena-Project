@@ -198,6 +198,24 @@ export default function DashboardPage() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Katalog Berita
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Browse dan cari koleksi berita dari berbagai portal berita
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/katalog-berita">
+                    <button className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Download Data Fenomena
                 </h3>
                 <p className="mt-2 text-sm text-gray-500 flex-1">
