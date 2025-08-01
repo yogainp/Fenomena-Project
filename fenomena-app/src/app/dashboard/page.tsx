@@ -198,6 +198,24 @@ export default function DashboardPage() {
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  🧠 Insight Fenomena
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  AI-powered insights berdasarkan korelasi fenomena, survei, dan berita
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/insight-fenomena">
+                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                      Generate
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Katalog Berita
                 </h3>
                 <p className="mt-2 text-sm text-gray-500 flex-1">

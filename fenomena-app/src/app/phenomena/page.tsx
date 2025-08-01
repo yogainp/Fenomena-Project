@@ -92,7 +92,7 @@ export default function PhenomenaPage() {
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData);
+        setRegions(regionsData.regions || []);
       }
       
       await fetchPhenomena();
