@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const categoryId = url.searchParams.get('categoryId');
     const periodId = url.searchParams.get('periodId');
+    const startDate = url.searchParams.get('startDate');
+    const endDate = url.searchParams.get('endDate');
     const regionId = url.searchParams.get('regionId');
     const search = url.searchParams.get('search');
     const count = url.searchParams.get('count') === 'true';
@@ -31,9 +33,32 @@ export async function GET(request: NextRequest) {
       whereClause.categoryId = categoryId;
     }
 
-    // Filter by period if provided
+    // Filter by period if provided (backward compatibility)
     if (periodId) {
       whereClause.periodId = periodId;
+    }
+
+    // Filter by date range using category's startDate and endDate
+    if (startDate || endDate) {
+      whereClause.category = {
+        AND: []
+      };
+      
+      if (startDate) {
+        whereClause.category.AND.push({
+          startDate: {
+            gte: new Date(startDate)
+          }
+        });
+      }
+      
+      if (endDate) {
+        whereClause.category.AND.push({
+          endDate: {
+            lte: new Date(endDate)
+          }
+        });
+      }
     }
 
     // Filter by region if provided

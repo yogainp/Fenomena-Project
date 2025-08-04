@@ -30,12 +30,6 @@ interface Category {
   description: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 interface Region {
   id: string;
@@ -48,7 +42,6 @@ interface Region {
 export default function PhenomenaPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,7 +50,8 @@ export default function PhenomenaPage() {
   // Filter state
   const [filters, setFilters] = useState({
     categoryId: '',
-    periodId: '',
+    startDate: '',
+    endDate: '',
     regionId: '',
     search: '',
   });
@@ -74,9 +68,8 @@ export default function PhenomenaPage() {
     try {
       setLoading(true);
       
-      const [categoriesRes, periodsRes, regionsRes] = await Promise.all([
+      const [categoriesRes, regionsRes] = await Promise.all([
         fetch('/api/categories'),
-        fetch('/api/periods'),
         fetch('/api/regions'),
       ]);
       
@@ -85,10 +78,6 @@ export default function PhenomenaPage() {
         setCategories(categoriesData);
       }
       
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
-      }
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
@@ -108,7 +97,8 @@ export default function PhenomenaPage() {
       // Fetch phenomena with filters
       const params = new URLSearchParams();
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.periodId) params.append('periodId', filters.periodId);
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.regionId) params.append('regionId', filters.regionId);
       if (filters.search) params.append('search', filters.search);
       
@@ -183,7 +173,7 @@ export default function PhenomenaPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-4">Filter Fenomena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -203,20 +193,25 @@ export default function PhenomenaPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Periode Survei
+                Tanggal Mulai
               </label>
-              <select
-                value={filters.periodId}
-                onChange={(e) => setFilters({ ...filters, periodId: e.target.value })}
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Semua Periode</option>
-                {periods?.map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.name}
-                  </option>
-                )) || []}
-              </select>
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Selesai
+              </label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

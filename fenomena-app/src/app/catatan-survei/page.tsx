@@ -32,12 +32,6 @@ interface Category {
   description: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 interface UploadResult {
   success: boolean;
@@ -47,7 +41,6 @@ interface UploadResult {
   message?: string;
   error?: string;
   categoryName?: string;
-  periodName?: string;
 }
 
 interface ExistingDataInfo {
@@ -56,7 +49,6 @@ interface ExistingDataInfo {
   lastUploadedBy?: string;
   lastUploadedAt?: string;
   categoryName: string;
-  periodName: string;
   regionStats: Array<{
     region: {
       province: string;
@@ -77,7 +69,6 @@ export default function CatatanSurveiPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [data, setData] = useState<CatatanSurvei[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
@@ -89,9 +80,8 @@ export default function CatatanSurveiPage() {
   const [search, setSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Upload flow state
+  // Upload flow state - removed periods
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [showUploadSection, setShowUploadSection] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(false);
@@ -157,16 +147,12 @@ export default function CatatanSurveiPage() {
     try {
       console.log('Fetching initial data...');
       
-      const [categoriesRes, periodsRes] = await Promise.all([
-        makeAuthenticatedRequest('/api/categories'),
-        makeAuthenticatedRequest('/api/periods'),
-      ]);
+      const categoriesRes = await makeAuthenticatedRequest('/api/categories');
       
       console.log('Categories response:', categoriesRes.status);
-      console.log('Periods response:', periodsRes.status);
       
       // Check if authentication failed
-      if (categoriesRes.status === 401 || periodsRes.status === 401) {
+      if (categoriesRes.status === 401) {
         console.log('Authentication failed, redirecting to login');
         setError('❌ Sesi telah berakhir. Silakan login kembali.');
         setTimeout(() => {
@@ -186,14 +172,6 @@ export default function CatatanSurveiPage() {
         hasError = true;
       }
       
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
-        console.log('Periods loaded:', periodsData.length);
-      } else {
-        console.error('Failed to load periods:', periodsRes.status);
-        hasError = true;
-      }
       
       if (hasError) {
         setError('Gagal memuat data kategori atau periode. Silakan refresh halaman.');
@@ -217,7 +195,6 @@ export default function CatatanSurveiPage() {
       });
       
       if (selectedCategoryId) params.append('categoryId', selectedCategoryId);
-      if (selectedPeriodId) params.append('periodId', selectedPeriodId);
       
       const response = await makeAuthenticatedRequest(`/api/catatan-survei?${params.toString()}`);
       
@@ -252,8 +229,8 @@ export default function CatatanSurveiPage() {
   };
 
   const handleCategoryPeriodSelection = async () => {
-    if (!selectedCategoryId || !selectedPeriodId) {
-      setError('Pilih kategori dan periode terlebih dahulu');
+    if (!selectedCategoryId) {
+      setError('Pilih kategori terlebih dahulu');
       return;
     }
 
@@ -270,7 +247,6 @@ export default function CatatanSurveiPage() {
         },
         body: JSON.stringify({
           categoryId: selectedCategoryId,
-          periodId: selectedPeriodId,
         }),
       });
 
@@ -343,7 +319,6 @@ export default function CatatanSurveiPage() {
       lastModified: selectedFile.lastModified
     });
     console.log('Category ID:', selectedCategoryId);
-    console.log('Period ID:', selectedPeriodId);
 
     setUploading(true);
     setUploadResult(null);
@@ -354,7 +329,6 @@ export default function CatatanSurveiPage() {
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('categoryId', selectedCategoryId);
-      formData.append('periodId', selectedPeriodId);
 
       console.log('FormData entries:');
       for (const [key, value] of formData.entries()) {
@@ -504,21 +478,20 @@ export default function CatatanSurveiPage() {
   };
 
   const downloadTemplate = () => {
-    if (!selectedCategoryId || !selectedPeriodId) {
-      alert('Pilih kategori dan periode terlebih dahulu');
+    if (!selectedCategoryId) {
+      alert('Pilih kategori terlebih dahulu');
       return;
     }
 
     const selectedCategory = categories.find(c => c.id === selectedCategoryId);
-    const selectedPeriod = periods.find(p => p.id === selectedPeriodId);
     
-    const csvContent = `idwilayah,nomorResponden,catatan\n"region-id-1","001","Contoh catatan responden 1 untuk ${selectedCategory?.name} - ${selectedPeriod?.name}"\n"region-id-1","002","Contoh catatan responden 2 untuk ${selectedCategory?.name} - ${selectedPeriod?.name}"`;
+    const csvContent = `idwilayah,nomorResponden,catatan\n"region-id-1","001","Contoh catatan responden 1 untuk ${selectedCategory?.name}"\n"region-id-1","002","Contoh catatan responden 2 untuk ${selectedCategory?.name}"`;
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.download = `template-${selectedCategory?.name}-${selectedPeriod?.name}.csv`;
+    a.download = `template-${selectedCategory?.name}.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -527,7 +500,6 @@ export default function CatatanSurveiPage() {
 
   const resetSelection = () => {
     setSelectedCategoryId('');
-    setSelectedPeriodId('');
     setShowUploadSection(false);
     setShowWarning(false);
     setExistingDataInfo(null);
@@ -639,7 +611,7 @@ export default function CatatanSurveiPage() {
           </div>
           
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Kategori Survei <span className="text-red-500">*</span>
@@ -658,31 +630,12 @@ export default function CatatanSurveiPage() {
                   ))}
                 </select>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Periode Survei <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={selectedPeriodId}
-                  onChange={(e) => setSelectedPeriodId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  disabled={showUploadSection}
-                >
-                  <option value="">Pilih Periode</option>
-                  {periods.map((period) => (
-                    <option key={period.id} value={period.id}>
-                      {period.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
             
             <div className="flex gap-3">
               <button
                 onClick={handleCategoryPeriodSelection}
-                disabled={!selectedCategoryId || !selectedPeriodId || checkingExisting || showUploadSection}
+                disabled={!selectedCategoryId || checkingExisting || showUploadSection}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {checkingExisting ? 'Mengecek Data...' : 'Lanjutkan'}
@@ -714,7 +667,6 @@ export default function CatatanSurveiPage() {
                 <h3 className="font-medium text-gray-900 mb-2">Informasi Data Existing:</h3>
                 <ul className="space-y-1 text-sm text-gray-700">
                   <li><strong>Kategori:</strong> {existingDataInfo.categoryName}</li>
-                  <li><strong>Periode:</strong> {existingDataInfo.periodName}</li>
                   <li><strong>Total Responden:</strong> {existingDataInfo.existingCount.toLocaleString()}</li>
                   {existingDataInfo.lastUploadedBy && (
                     <li><strong>Terakhir upload:</strong> {existingDataInfo.lastUploadedBy} pada {new Date(existingDataInfo.lastUploadedAt!).toLocaleDateString('id-ID')}</li>
@@ -774,7 +726,7 @@ export default function CatatanSurveiPage() {
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">Step 2: Upload File CSV</h2>
               <p className="text-sm text-gray-600">
-                Upload file CSV untuk {existingDataInfo?.categoryName || categories.find(c => c.id === selectedCategoryId)?.name} - {existingDataInfo?.periodName || periods.find(p => p.id === selectedPeriodId)?.name}
+                Upload file CSV untuk {existingDataInfo?.categoryName || categories.find(c => c.id === selectedCategoryId)?.name}
               </p>
             </div>
             
@@ -785,7 +737,7 @@ export default function CatatanSurveiPage() {
                   onClick={downloadTemplate}
                   className="text-blue-600 hover:text-blue-800 text-sm"
                 >
-                  📥 Download Template CSV untuk {categories.find(c => c.id === selectedCategoryId)?.name} - {periods.find(p => p.id === selectedPeriodId)?.name}
+                  📥 Download Template CSV untuk {categories.find(c => c.id === selectedCategoryId)?.name}
                 </button>
                 <p className="text-xs text-gray-500 mt-1">
                   Format: idwilayah, nomorResponden, catatan
@@ -1016,7 +968,7 @@ export default function CatatanSurveiPage() {
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">Preview Data (50 baris pertama)</h2>
               <p className="text-sm text-gray-600">
-                {uploadResult.categoryName} - {uploadResult.periodName} • {uploadResult.imported?.toLocaleString()} total responden
+                {uploadResult.categoryName} • {uploadResult.imported?.toLocaleString()} total responden
               </p>
             </div>
             <div className="p-6">

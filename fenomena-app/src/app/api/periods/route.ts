@@ -6,10 +6,18 @@ export async function GET(request: NextRequest) {
   try {
     requireAuth(request);
 
-    const periods = await prisma.surveyPeriod.findMany({
+    // Get period data from survey_categories that have period information
+    const periods = await prisma.surveyCategory.findMany({
+      where: {
+        AND: [
+          { periodeSurvei: { not: null } },
+          { startDate: { not: null } },
+          { endDate: { not: null } }
+        ]
+      },
       select: {
         id: true,
-        name: true,
+        periodeSurvei: true,
         startDate: true,
         endDate: true,
       },
@@ -18,7 +26,15 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(periods);
+    // Transform to match expected Period interface
+    const transformedPeriods = periods.map(period => ({
+      id: period.id,
+      name: period.periodeSurvei,
+      startDate: period.startDate,
+      endDate: period.endDate,
+    }));
+
+    return NextResponse.json(transformedPeriods);
   } catch (error: any) {
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });
