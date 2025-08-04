@@ -10,12 +10,6 @@ interface Category {
   description: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 interface Region {
   id: string;
@@ -33,7 +27,6 @@ interface User {
 export default function AddPhenomenaPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +37,6 @@ export default function AddPhenomenaPage() {
     title: '',
     description: '',
     categoryId: '',
-    periodId: '',
     regionId: '',
   });
 
@@ -56,9 +48,8 @@ export default function AddPhenomenaPage() {
     try {
       setLoading(true);
       
-      const [categoriesRes, periodsRes, regionsRes, userRes] = await Promise.all([
+      const [categoriesRes, regionsRes, userRes] = await Promise.all([
         fetch('/api/categories'),
-        fetch('/api/periods'),
         fetch('/api/regions'),
         fetch('/api/profile'),
       ]);
@@ -68,10 +59,6 @@ export default function AddPhenomenaPage() {
         setCategories(categoriesData);
       }
       
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
-      }
       
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
@@ -206,24 +193,6 @@ export default function AddPhenomenaPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Periode Survei <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.periodId}
-                  onChange={(e) => setFormData({ ...formData, periodId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Pilih Periode</option>
-                  {periods.map((period) => (
-                    <option key={period.id} value={period.id}>
-                      {period.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <div>

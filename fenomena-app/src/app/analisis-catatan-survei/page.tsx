@@ -17,7 +17,8 @@ interface AnalysisData {
   filterInfo: {
     categoryId: string;
     regionId: string;
-    periodId: string;
+    startDate: string;
+    endDate: string;
     isFiltered: boolean;
   };
 }
@@ -34,18 +35,11 @@ interface Region {
   regionCode: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 export default function AnalisisCatatanSurveiPage() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
@@ -54,7 +48,8 @@ export default function AnalisisCatatanSurveiPage() {
   const [filters, setFilters] = useState({
     categoryId: 'all',
     regionId: 'all',
-    periodId: 'all',
+    startDate: '',
+    endDate: '',
   });
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
@@ -71,10 +66,9 @@ export default function AnalisisCatatanSurveiPage() {
 
   const fetchInitialData = async () => {
     try {
-      const [categoriesRes, regionsRes, periodsRes] = await Promise.all([
+      const [categoriesRes, regionsRes] = await Promise.all([
         fetch('/api/categories'),
         fetch('/api/regions'),
-        fetch('/api/periods'),
       ]);
 
       if (categoriesRes.ok) {
@@ -87,10 +81,6 @@ export default function AnalisisCatatanSurveiPage() {
         setRegions(regionsData);
       }
 
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData.periods || periodsData);
-      }
 
       // Mark initial data as loaded and fetch analysis data
       setInitialDataLoaded(true);
@@ -107,7 +97,8 @@ export default function AnalisisCatatanSurveiPage() {
       const params = new URLSearchParams();
       if (filters.categoryId !== 'all') params.append('categoryId', filters.categoryId);
       if (filters.regionId !== 'all') params.append('regionId', filters.regionId);
-      if (filters.periodId !== 'all') params.append('periodId', filters.periodId);
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
       
       const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`);
       
@@ -129,7 +120,8 @@ export default function AnalisisCatatanSurveiPage() {
     setFilters({
       categoryId: 'all',
       regionId: 'all',
-      periodId: 'all',
+      startDate: '',
+      endDate: '',
     });
   };
 
@@ -205,7 +197,7 @@ export default function AnalisisCatatanSurveiPage() {
             )}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -226,20 +218,26 @@ export default function AnalisisCatatanSurveiPage() {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Periode Survei
+                Tanggal Mulai
               </label>
-              <select
-                value={filters.periodId}
-                onChange={(e) => setFilters({ ...filters, periodId: e.target.value })}
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">Semua Periode</option>
-                {periods.map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.name}
-                  </option>
-                ))}
-              </select>
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Selesai
+              </label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
             
             <div>

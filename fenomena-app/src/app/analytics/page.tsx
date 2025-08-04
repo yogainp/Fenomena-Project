@@ -59,7 +59,8 @@ export default function AnalyticsPage() {
   
   // Filter states for text analysis
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
+  const [selectedEndDate, setSelectedEndDate] = useState<string>('');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [textAnalysisLoading, setTextAnalysisLoading] = useState(false);
 
@@ -67,12 +68,13 @@ export default function AnalyticsPage() {
     fetchData();
   }, []);
 
-  const fetchTextAnalysis = async (categoryId: string = 'all', periodId: string = 'all', regionId: string = 'all') => {
+  const fetchTextAnalysis = async (categoryId: string = 'all', startDate: string = '', endDate: string = '', regionId: string = 'all') => {
     try {
       setTextAnalysisLoading(true);
       const params = new URLSearchParams();
       if (categoryId !== 'all') params.append('categoryId', categoryId);
-      if (periodId !== 'all') params.append('periodId', periodId);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
       if (regionId !== 'all') params.append('regionId', regionId);
       
       const url = `/api/analytics/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
@@ -133,24 +135,30 @@ export default function AnalyticsPage() {
 
   const handleCategoryChange = (categoryId: string) => {
     setSelectedCategory(categoryId);
-    fetchTextAnalysis(categoryId, selectedPeriod, selectedRegion);
+    fetchTextAnalysis(categoryId, selectedStartDate, selectedEndDate, selectedRegion);
   };
 
-  const handlePeriodChange = (periodId: string) => {
-    setSelectedPeriod(periodId);
-    fetchTextAnalysis(selectedCategory, periodId, selectedRegion);
+  const handleStartDateChange = (startDate: string) => {
+    setSelectedStartDate(startDate);
+    fetchTextAnalysis(selectedCategory, startDate, selectedEndDate, selectedRegion);
+  };
+
+  const handleEndDateChange = (endDate: string) => {
+    setSelectedEndDate(endDate);
+    fetchTextAnalysis(selectedCategory, selectedStartDate, endDate, selectedRegion);
   };
 
   const handleRegionChange = (regionId: string) => {
     setSelectedRegion(regionId);
-    fetchTextAnalysis(selectedCategory, selectedPeriod, regionId);
+    fetchTextAnalysis(selectedCategory, selectedStartDate, selectedEndDate, regionId);
   };
 
   const resetFilters = () => {
     setSelectedCategory('all');
-    setSelectedPeriod('all');
+    setSelectedStartDate('');
+    setSelectedEndDate('');
     setSelectedRegion('all');
-    fetchTextAnalysis('all', 'all', 'all');
+    fetchTextAnalysis('all', '', '', 'all');
   };
 
   if (loading) {
@@ -445,20 +453,24 @@ export default function AnalyticsPage() {
                     </select>
                   </div>
                   <div className="flex flex-col">
-                    <label className="text-sm font-medium text-gray-700 mb-2">Filter Periode:</label>
-                    <select
-                      value={selectedPeriod}
-                      onChange={(e) => handlePeriodChange(e.target.value)}
+                    <label className="text-sm font-medium text-gray-700 mb-2">Tanggal Mulai:</label>
+                    <input
+                      type="date"
+                      value={selectedStartDate}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
                       disabled={textAnalysisLoading}
                       className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="all">Semua Periode</option>
-                      {overviewData.periodAnalysis?.map((period: any) => (
-                        <option key={period.periodId} value={period.periodId}>
-                          {period.name} ({period.count})
-                        </option>
-                      ))}
-                    </select>
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-700 mb-2">Tanggal Selesai:</label>
+                    <input
+                      type="date"
+                      value={selectedEndDate}
+                      onChange={(e) => handleEndDateChange(e.target.value)}
+                      disabled={textAnalysisLoading}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
                   <div className="flex flex-col">
                     <label className="text-sm font-medium text-gray-700 mb-2">Filter Wilayah:</label>
@@ -478,7 +490,7 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(selectedCategory !== 'all' || selectedPeriod !== 'all' || selectedRegion !== 'all') && (
+                  {(selectedCategory !== 'all' || selectedStartDate !== '' || selectedEndDate !== '' || selectedRegion !== 'all') && (
                     <button
                       onClick={resetFilters}
                       disabled={textAnalysisLoading}

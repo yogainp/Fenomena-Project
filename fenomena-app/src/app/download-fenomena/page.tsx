@@ -10,12 +10,6 @@ interface Category {
   description: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 interface Region {
   id: string;
@@ -25,7 +19,6 @@ interface Region {
 
 export default function DownloadFenomenaPage() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -35,7 +28,8 @@ export default function DownloadFenomenaPage() {
   // Filter state
   const [filters, setFilters] = useState({
     categoryId: '',
-    periodId: '',
+    startDate: '',
+    endDate: '',
     regionId: '',
     format: 'csv', // csv, json, excel
   });
@@ -53,15 +47,14 @@ export default function DownloadFenomenaPage() {
     if (!loading) {
       fetchPreviewCount();
     }
-  }, [filters.categoryId, filters.periodId, filters.regionId, loading]);
+  }, [filters.categoryId, filters.startDate, filters.endDate, filters.regionId, loading]);
 
   const fetchMetadata = async () => {
     try {
       setLoading(true);
       
-      const [categoriesRes, periodsRes, regionsRes] = await Promise.all([
+      const [categoriesRes, regionsRes] = await Promise.all([
         makeAuthenticatedRequest('/api/categories'),
-        makeAuthenticatedRequest('/api/periods'),
         makeAuthenticatedRequest('/api/regions'),
       ]);
 
@@ -70,10 +63,6 @@ export default function DownloadFenomenaPage() {
         setCategories(categoriesData);
       }
       
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
-      }
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
@@ -92,7 +81,8 @@ export default function DownloadFenomenaPage() {
       setPreviewLoading(true);
       const params = new URLSearchParams();
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.periodId) params.append('periodId', filters.periodId);
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.regionId) params.append('regionId', filters.regionId);
       params.append('count', 'true');
 
@@ -119,7 +109,8 @@ export default function DownloadFenomenaPage() {
 
       const params = new URLSearchParams();
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.periodId) params.append('periodId', filters.periodId);
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.regionId) params.append('regionId', filters.regionId);
       params.append('format', filters.format);
       params.append('download', 'true');
@@ -143,10 +134,10 @@ export default function DownloadFenomenaPage() {
         // Generate filename based on filters
         const timestamp = new Date().toISOString().split('T')[0];
         const categoryName = filters.categoryId ? categories.find(c => c.id === filters.categoryId)?.name || 'kategori' : '';
-        const periodName = filters.periodId ? periods.find(p => p.id === filters.periodId)?.name || 'periode' : '';
+        const dateRangeName = filters.startDate && filters.endDate ? `${filters.startDate}-to-${filters.endDate}` : filters.startDate ? `from-${filters.startDate}` : filters.endDate ? `to-${filters.endDate}` : '';
         const regionName = filters.regionId ? regions.find(r => r.id === filters.regionId)?.name || 'wilayah' : '';
         
-        const parts = [categoryName, periodName, regionName].filter(Boolean);
+        const parts = [categoryName, dateRangeName, regionName].filter(Boolean);
         filename = `fenomena-${parts.join('-')}-${timestamp}.${filters.format}`;
       }
 
@@ -180,12 +171,15 @@ export default function DownloadFenomenaPage() {
       selected.push('Kategori: Semua Kategori');
     }
     
-    // Period filter
-    if (filters.periodId) {
-      const period = periods.find(p => p.id === filters.periodId);
-      if (period) selected.push(`Periode: ${period.name}`);
+    // Date range filter
+    if (filters.startDate && filters.endDate) {
+      selected.push(`Periode: ${filters.startDate} s/d ${filters.endDate}`);
+    } else if (filters.startDate) {
+      selected.push(`Periode: Dari ${filters.startDate}`);
+    } else if (filters.endDate) {
+      selected.push(`Periode: Sampai ${filters.endDate}`);
     } else {
-      selected.push('Periode: Semua Periode');
+      selected.push('Periode: Semua Tanggal');
     }
     
     // Region filter
@@ -242,7 +236,7 @@ export default function DownloadFenomenaPage() {
             Pilih filter untuk menentukan data fenomena yang ingin didownload. Minimal satu filter harus dipilih.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -263,20 +257,25 @@ export default function DownloadFenomenaPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Periode Survei
+                Tanggal Mulai
               </label>
-              <select
-                value={filters.periodId}
-                onChange={(e) => setFilters({ ...filters, periodId: e.target.value })}
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Semua Periode</option>
-                {periods.map((period) => (
-                  <option key={period.id} value={period.id}>
-                    {period.name}
-                  </option>
-                ))}
-              </select>
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tanggal Selesai
+              </label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
             <div>

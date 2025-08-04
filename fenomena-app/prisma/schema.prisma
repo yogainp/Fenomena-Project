@@ -46,19 +46,6 @@ model SurveyCategory {
   @@map("survey_categories")
 }
 
-model SurveyPeriod {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  startDate DateTime
-  endDate   DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  phenomena     Phenomenon[]
-  catatanSurvei CatatanSurvei[]
-
-  @@map("survey_periods")
-}
 
 model Region {
   id          String   @id @default(cuid())
@@ -86,8 +73,6 @@ model Phenomenon {
   user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   categoryId String
   category   SurveyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  periodId   String
-  period     SurveyPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   regionId   String
   region     Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
@@ -116,7 +101,7 @@ model AnalysisResult {
 model CatatanSurvei {
   id             String   @id @default(cuid())
   nomorResponden Int      // Nomor urut responden dalam survei (integer)
-  respondenId    String   // Auto-generated: "${categoryId}-${periodId}-${nomorResponden}"
+  respondenId    String   // Auto-generated: "${categoryId}-${nomorResponden}"
   catatan        String   @db.Text
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -125,15 +110,13 @@ model CatatanSurvei {
   region     Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
   categoryId String
   category   SurveyCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  periodId   String
-  period     SurveyPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
   userId     String
   user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   analysisResults AnalysisResult[]
 
   // Unique constraint untuk mencegah duplikasi responden
-  @@unique([categoryId, periodId, nomorResponden])
+  @@unique([categoryId, nomorResponden])
   @@map("catatan_survei")
 }
 
