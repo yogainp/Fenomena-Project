@@ -7,12 +7,12 @@ export async function POST(request: NextRequest) {
     const user = requireRole(request, 'ADMIN');
     const body = await request.json();
     
-    const { categoryId, periodId } = body;
+    const { categoryId } = body;
     
     // Validate required fields
-    if (!categoryId || !periodId) {
+    if (!categoryId) {
       return NextResponse.json(
-        { error: 'CategoryId dan periodId harus diisi' },
+        { error: 'CategoryId harus diisi' },
         { status: 400 }
       );
     }
@@ -29,23 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate period exists
-    const period = await prisma.surveyPeriod.findUnique({
-      where: { id: periodId },
-    });
-    
-    if (!period) {
-      return NextResponse.json(
-        { error: 'Periode tidak ditemukan' },
-        { status: 400 }
-      );
-    }
     
     // Check existing data
     const existingData = await prisma.catatanSurvei.findMany({
       where: {
         categoryId,
-        periodId,
       },
       include: {
         user: {
@@ -63,7 +51,6 @@ export async function POST(request: NextRequest) {
     const existingCount = await prisma.catatanSurvei.count({
       where: {
         categoryId,
-        periodId,
       },
     });
     
@@ -72,7 +59,6 @@ export async function POST(request: NextRequest) {
       by: ['regionId'],
       where: {
         categoryId,
-        periodId,
       },
       _count: {
         id: true,
@@ -106,7 +92,6 @@ export async function POST(request: NextRequest) {
       lastUploadedBy: existingData[0]?.user.username || null,
       lastUploadedAt: existingData[0]?.createdAt || null,
       categoryName: category.name,
-      periodName: period.name,
       regionStats,
     });
     

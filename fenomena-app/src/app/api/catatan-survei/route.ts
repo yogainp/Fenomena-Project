@@ -54,14 +54,6 @@ export async function GET(request: NextRequest) {
               description: true,
             },
           },
-          period: {
-            select: {
-              id: true,
-              name: true,
-              startDate: true,
-              endDate: true,
-            },
-          },
           user: {
             select: {
               id: true,

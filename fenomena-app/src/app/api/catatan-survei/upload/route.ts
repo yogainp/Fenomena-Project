@@ -9,7 +9,6 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const categoryId = formData.get('categoryId') as string;
-    const periodId = formData.get('periodId') as string;
     
     if (!file) {
       return NextResponse.json(
@@ -18,9 +17,9 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    if (!categoryId || !periodId) {
+    if (!categoryId) {
       return NextResponse.json(
-        { error: 'Kategori dan periode harus dipilih' },
+        { error: 'Kategori harus dipilih' },
         { status: 400 }
       );
     }
@@ -72,25 +71,17 @@ export async function POST(request: NextRequest) {
       catatan: header.indexOf('catatan'),
     };
     
-    // Validate category and period exist
-    const [category, period, regions] = await Promise.all([
+    // Validate category exists
+    const [category, regions] = await Promise.all([
       prisma.surveyCategory.findUnique({ where: { id: categoryId } }),
-      prisma.surveyPeriod.findUnique({ where: { id: periodId } }),
       prisma.region.findMany(),
     ]);
     
-    console.log('Found category:', category?.name, 'Found period:', period?.name);
+    console.log('Found category:', category?.name);
     
     if (!category) {
       return NextResponse.json(
         { error: 'Kategori tidak ditemukan' },
-        { status: 400 }
-      );
-    }
-    
-    if (!period) {
-      return NextResponse.json(
-        { error: 'Periode tidak ditemukan' },
         { status: 400 }
       );
     }
@@ -169,8 +160,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      // Generate respondenId
-      const respondenId = `${categoryId}-${periodId}-${nomorRespondenInt}`;
+      // Generate respondenId (without periodId)
+      const respondenId = `${categoryId}-${nomorRespondenInt}`;
       
       validData.push({
         nomorResponden: nomorRespondenInt, // Use integer value
@@ -178,7 +169,6 @@ export async function POST(request: NextRequest) {
         catatan: rowData.catatan,
         regionId: region.id, // Use the actual region ID from database
         categoryId,
-        periodId,
         userId: user.userId,
       });
     }
@@ -197,15 +187,14 @@ export async function POST(request: NextRequest) {
     
     // Execute replace operation in transaction
     await prisma.$transaction(async (tx) => {
-      // Step 1: Delete existing data for this category + period combination
+      // Step 1: Delete existing data for this category combination
       const deletedCount = await tx.catatanSurvei.deleteMany({
         where: {
           categoryId,
-          periodId,
         },
       });
       
-      console.log(`Deleted ${deletedCount.count} existing records for ${category?.name || 'Unknown Category'} - ${period?.name || 'Unknown Period'}`);
+      console.log(`Deleted ${deletedCount.count} existing records for ${category?.name || 'Unknown Category'}`);
       
       // Step 2: Insert new data in batches
       if (validData.length > 0) {
@@ -224,7 +213,6 @@ export async function POST(request: NextRequest) {
     const preview = await prisma.catatanSurvei.findMany({
       where: {
         categoryId,
-        periodId,
       },
       take: 50,
       orderBy: {
@@ -243,11 +231,6 @@ export async function POST(request: NextRequest) {
             name: true,
           },
         },
-        period: {
-          select: {
-            name: true,
-          },
-        },
         user: {
           select: {
             username: true,
@@ -262,10 +245,9 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
       preview,
       categoryName: category?.name || 'Unknown Category',
-      periodName: period?.name || 'Unknown Period',
       message: errors.length > 0 
         ? `${validData.length} data berhasil diimpor dengan ${errors.length} peringatan`
-        : `${validData.length} data berhasil diimpor untuk ${category?.name || 'Unknown Category'} - ${period?.name || 'Unknown Period'}`
+        : `${validData.length} data berhasil diimpor untuk ${category?.name || 'Unknown Category'}`
     });
     
   } catch (error: any) {
