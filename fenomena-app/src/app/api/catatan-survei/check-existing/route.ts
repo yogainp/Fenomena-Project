@@ -4,8 +4,11 @@ import { requireRole } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== Check Existing API Called ===');
     const user = requireRole(request, 'ADMIN');
+    console.log('User authenticated:', user);
     const body = await request.json();
+    console.log('Request body:', body);
     
     const { categoryId } = body;
     
@@ -18,11 +21,14 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate category exists
+    console.log('Finding category with ID:', categoryId);
     const category = await prisma.surveyCategory.findUnique({
       where: { id: categoryId },
     });
+    console.log('Category found:', category);
     
     if (!category) {
+      console.log('Category not found for ID:', categoryId);
       return NextResponse.json(
         { error: 'Kategori tidak ditemukan' },
         { status: 400 }
@@ -96,10 +102,15 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error: any) {
+    console.error('=== Check Existing API Error ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Full error:', error);
+    
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
     console.error('Check existing data error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
   }
 }

@@ -101,12 +101,12 @@ export async function POST(request: NextRequest) {
     const user = requireRole(request, 'ADMIN');
     const body = await request.json();
     
-    const { catatan, regionId, categoryId, periodId, nomorResponden } = body;
+    const { catatan, regionId, categoryId, nomorResponden } = body;
     
     // Validate required fields
-    if (!catatan || !regionId || !categoryId || !periodId || nomorResponden === undefined) {
+    if (!catatan || !regionId || !categoryId || nomorResponden === undefined) {
       return NextResponse.json(
-        { error: 'Catatan, regionId, categoryId, periodId, dan nomorResponden harus diisi' },
+        { error: 'Catatan, regionId, categoryId, dan nomorResponden harus diisi' },
         { status: 400 }
       );
     }
@@ -144,22 +144,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate period exists
-    const period = await prisma.surveyPeriod.findUnique({
-      where: { id: periodId },
-    });
-    
-    if (!period) {
-      return NextResponse.json(
-        { error: 'Periode tidak ditemukan' },
-        { status: 400 }
-      );
-    }
-    
     // Admin can add to any region
     
-    // Generate respondenId  
-    const respondenId = `${categoryId}-${periodId}-${nomorRespondenInt}`;
+    // Generate respondenId (without periodId)
+    const respondenId = `${categoryId}-${nomorRespondenInt}`;
     
     const catatanSurvei = await prisma.catatanSurvei.create({
       data: {
@@ -168,7 +156,6 @@ export async function POST(request: NextRequest) {
         catatan,
         regionId,
         categoryId,
-        periodId,
         userId: user.userId,
       },
       include: {
@@ -185,14 +172,6 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             description: true,
-          },
-        },
-        period: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
           },
         },
         user: {

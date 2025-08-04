@@ -7,6 +7,9 @@ interface Category {
   id: string;
   name: string;
   description: string;
+  periodeSurvei: string | null;
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
   _count: {
     phenomena: number;
@@ -17,14 +20,6 @@ export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Form state
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-  });
 
   useEffect(() => {
     fetchCategories();
@@ -50,45 +45,6 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    try {
-      const method = editingId ? 'PUT' : 'POST';
-      const url = editingId ? `/api/admin/categories/${editingId}` : '/api/admin/categories';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setShowForm(false);
-        setEditingId(null);
-        setFormData({ name: '', description: '' });
-        fetchCategories();
-      } else {
-        setError(data.error || 'Operation failed');
-      }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    }
-  };
-
-  const handleEdit = (category: Category) => {
-    setEditingId(category.id);
-    setFormData({
-      name: category.name,
-      description: category.description || '',
-    });
-    setShowForm(true);
-  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete category "${name}"?`)) return;
@@ -129,12 +85,12 @@ export default function AdminCategoriesPage() {
               </Link>
               <h1 className="ml-4 text-xl font-semibold">Kelola Kategori Survei</h1>
             </div>
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            <Link
+              href="/admin/categories/add"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 inline-block"
             >
               + Tambah Kategori
-            </button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -167,20 +123,34 @@ export default function AdminCategoriesPage() {
                       {category.description && (
                         <p className="mt-2 text-gray-600">{category.description}</p>
                       )}
-                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
-                        <span>{category._count.phenomena} fenomena</span>
-                        <span>
-                          Dibuat: {new Date(category.createdAt).toLocaleDateString('id-ID')}
-                        </span>
+                      <div className="mt-2 space-y-1">
+                        {category.periodeSurvei && (
+                          <div className="text-sm text-blue-600">
+                            <span className="font-medium">Periode:</span> {category.periodeSurvei}
+                          </div>
+                        )}
+                        {category.startDate && category.endDate && (
+                          <div className="text-sm text-green-600">
+                            <span className="font-medium">Rentang:</span> {' '}
+                            {new Date(category.startDate).toLocaleDateString('id-ID')} - {' '}
+                            {new Date(category.endDate).toLocaleDateString('id-ID')}
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                          <span>{category._count.phenomena} fenomena</span>
+                          <span>
+                            Dibuat: {new Date(category.createdAt).toLocaleDateString('id-ID')}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="ml-4 flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(category)}
+                      <Link
+                        href={`/admin/categories/edit/${category.id}`}
                         className="text-blue-600 hover:text-blue-800"
                       >
                         Edit
-                      </button>
+                      </Link>
                       <button
                         onClick={() => handleDelete(category.id, category.name)}
                         disabled={category._count.phenomena > 0}
@@ -197,62 +167,6 @@ export default function AdminCategoriesPage() {
           </div>
         </div>
 
-        {/* Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-md w-full">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">
-                  {editingId ? 'Edit Kategori' : 'Tambah Kategori Baru'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nama Kategori
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Deskripsi (Opsional)
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
-                  <div className="flex justify-end space-x-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowForm(false);
-                        setEditingId(null);
-                        setFormData({ name: '', description: '' });
-                      }}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      {editingId ? 'Update' : 'Simpan'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

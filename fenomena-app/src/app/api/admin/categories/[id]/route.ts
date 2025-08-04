@@ -6,7 +6,42 @@ import { requireRole } from '@/lib/middleware';
 const categorySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
+  periodeSurvei: z.string().optional(),
+  startDate: z.string().datetime().optional().nullable(),
+  endDate: z.string().datetime().optional().nullable(),
 });
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    requireRole(request, 'ADMIN');
+
+    const category = await prisma.surveyCategory.findUnique({
+      where: { id: params.id },
+      include: {
+        _count: {
+          select: {
+            phenomena: true,
+          },
+        },
+      },
+    });
+
+    if (!category) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(category);
+  } catch (error: any) {
+    if (error.message.includes('required')) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    console.error('Get category error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
 
 export async function PUT(
   request: NextRequest,
@@ -42,7 +77,13 @@ export async function PUT(
 
     const category = await prisma.surveyCategory.update({
       where: { id: params.id },
-      data: validatedData,
+      data: {
+        name: validatedData.name,
+        description: validatedData.description || null,
+        periodeSurvei: validatedData.periodeSurvei || null,
+        startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,
+        endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
+      },
     });
 
     return NextResponse.json(category);

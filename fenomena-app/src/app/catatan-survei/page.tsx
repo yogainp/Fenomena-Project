@@ -18,9 +18,6 @@ interface CatatanSurvei {
   category: {
     name: string;
   };
-  period: {
-    name: string;
-  };
   user: {
     username: string;
   };
@@ -1065,7 +1062,7 @@ export default function CatatanSurveiPage() {
                         Catatan
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Kategori - Periode
+                        Kategori
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Wilayah
@@ -1087,7 +1084,7 @@ export default function CatatanSurveiPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {item.category?.name || 'Unknown Category'} - {item.period?.name || 'Unknown Period'}
+                          {item.category?.name || 'Unknown Category'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {item.region.city}, {item.region.province}

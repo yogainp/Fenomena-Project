@@ -13,9 +13,9 @@ interface Phenomenon {
   };
   category: {
     name: string;
-  };
-  period: {
-    name: string;
+    periodeSurvei?: string;
+    startDate?: string;
+    endDate?: string;
   };
   region: {
     province: string;
@@ -266,7 +266,7 @@ export default function PhenomenaPage() {
                       <p className="mt-2 text-gray-600">{phenomenon.description}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                         <span>Kategori: {phenomenon.category.name}</span>
-                        <span>Periode: {phenomenon.period.name}</span>
+                        <span>Periode: {phenomenon.category.periodeSurvei || 'N/A'}</span>
                         <span>Wilayah: {phenomenon.region.city}, {phenomenon.region.province}</span>
                         <span>Oleh: {phenomenon.user.username}</span>
                         <span>

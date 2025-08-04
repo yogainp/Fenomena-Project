@@ -14,9 +14,7 @@ interface Phenomenon {
   };
   category: {
     name: string;
-  };
-  period: {
-    name: string;
+    periodeSurvei?: string;
   };
   region?: {
     province: string;
@@ -92,7 +90,7 @@ export default function CatalogPage() {
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(Array.isArray(regionsData) ? regionsData : []);
+        setRegions(Array.isArray(regionsData.regions) ? regionsData.regions : Array.isArray(regionsData) ? regionsData : []);
       }
     } catch (error) {
       setError('Failed to load data');
@@ -281,7 +279,7 @@ export default function CatalogPage() {
                               {phenomenon.category.name}
                             </span>
                             <span className="text-green-600 bg-green-50 px-2 py-1 rounded">
-                              {phenomenon.period.name}
+                              {phenomenon.category.periodeSurvei || 'N/A'}
                             </span>
                             {phenomenon.region && (
                               <span className="text-purple-600 bg-purple-50 px-2 py-1 rounded">

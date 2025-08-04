@@ -45,7 +45,9 @@ interface TextAnalysisData {
   };
   filterInfo: {
     categoryId: string;
-    periodId: string;
+    regionId: string;
+    startDate: string;
+    endDate: string;
     isFiltered: boolean;
   };
 }
@@ -329,7 +331,7 @@ export default function AnalyticsPage() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
           {/* Category Distribution */}
-          {overviewData.categoryAnalysis && overviewData.categoryAnalysis.length > 0 && (
+          {overviewData.categoryAnalysis && Array.isArray(overviewData.categoryAnalysis) && overviewData.categoryAnalysis.length > 0 && (
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Kategori</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -345,7 +347,7 @@ export default function AnalyticsPage() {
           )}
 
           {/* Period Distribution */}
-          {overviewData.periodAnalysis && overviewData.periodAnalysis.length > 0 && (
+          {overviewData.periodAnalysis && Array.isArray(overviewData.periodAnalysis) && overviewData.periodAnalysis.length > 0 && (
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Periode</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -360,9 +362,9 @@ export default function AnalyticsPage() {
                     fill="#8884d8"
                     label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   >
-                    {overviewData.periodAnalysis.map((entry: any, index: number) => (
+                    {overviewData.periodAnalysis && Array.isArray(overviewData.periodAnalysis) ? overviewData.periodAnalysis.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                    )) : []}
                   </Pie>
                   <Tooltip />
                 </PieChart>
@@ -371,7 +373,7 @@ export default function AnalyticsPage() {
           )}
 
           {/* Region Distribution */}
-          {overviewData.regionAnalysis && overviewData.regionAnalysis.length > 0 && (
+          {overviewData.regionAnalysis && Array.isArray(overviewData.regionAnalysis) && overviewData.regionAnalysis.length > 0 && (
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-4">Distribusi Fenomena per Wilayah</h3>
               <ResponsiveContainer width="100%" height={300}>
@@ -379,7 +381,7 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="city" angle={-45} textAnchor="end" height={100} />
                   <YAxis />
-                  <Tooltip formatter={([value], [name]) => [value, 'Jumlah Fenomena']} labelFormatter={(label) => `Wilayah: ${label}`} />
+                  <Tooltip />
                   <Bar dataKey="count" fill="#FF8042" />
                 </BarChart>
               </ResponsiveContainer>
@@ -388,7 +390,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* User Contributions */}
-        {overviewData.userContributions && overviewData.userContributions.length > 0 && (
+        {overviewData.userContributions && Array.isArray(overviewData.userContributions) && overviewData.userContributions.length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow mb-6">
             <h3 className="text-lg font-semibold mb-4">Top Kontributor Fenomena</h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -404,7 +406,7 @@ export default function AnalyticsPage() {
         )}
 
         {/* Monthly Trend */}
-        {overviewData.monthlyTrend && overviewData.monthlyTrend.length > 0 && (
+        {overviewData.monthlyTrend && Array.isArray(overviewData.monthlyTrend) && overviewData.monthlyTrend.length > 0 && (
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold mb-4">Trend Fenomena per Bulan</h3>
             <ResponsiveContainer width="100%" height={300}>
@@ -661,7 +663,7 @@ export default function AnalyticsPage() {
         {activeTab === 'trends' && (
           overviewData ? (
           <div className="space-y-6">
-            {overviewData.monthlyTrend && overviewData.monthlyTrend.length > 0 ? (
+            {overviewData.monthlyTrend && Array.isArray(overviewData.monthlyTrend) && overviewData.monthlyTrend.length > 0 ? (
               <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold mb-4">Tren Fenomena Bulanan</h3>
                 <ResponsiveContainer width="100%" height={400}>

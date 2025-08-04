@@ -10,9 +10,15 @@ export async function GET(request: NextRequest) {
     // Get basic counts first
     const totalPhenomena = await prisma.phenomenon.count();
     const totalCategories = await prisma.surveyCategory.count();
-    const totalPeriods = await prisma.surveyPeriod.count();
     const totalUsers = await prisma.user.count();
     const totalRegions = await prisma.region.count();
+    
+    // Count unique periods from categories
+    const categoriesWithPeriods = await prisma.surveyCategory.findMany({
+      select: { periodeSurvei: true },
+      where: { periodeSurvei: { not: null } }
+    });
+    const totalPeriods = new Set(categoriesWithPeriods.map(c => c.periodeSurvei)).size;
 
     console.log('Basic counts:', { totalPhenomena, totalCategories, totalPeriods, totalUsers, totalRegions });
 
@@ -33,8 +39,8 @@ export async function GET(request: NextRequest) {
       count: category._count.phenomena,
     }));
 
-    // Get period distribution
-    const periodData = await prisma.surveyPeriod.findMany({
+    // Get period distribution from categories
+    const categoriesWithPhenomenaCount = await prisma.surveyCategory.findMany({
       include: {
         _count: {
           select: {
@@ -42,12 +48,23 @@ export async function GET(request: NextRequest) {
           },
         },
       },
+      where: {
+        periodeSurvei: { not: null }
+      }
     });
 
-    const periodAnalysis = periodData.map(period => ({
-      periodId: period.id,
-      name: period.name,
-      count: period._count.phenomena,
+    // Group by period name and sum phenomena counts
+    const periodMap: { [key: string]: number } = {};
+    categoriesWithPhenomenaCount.forEach(category => {
+      if (category.periodeSurvei) {
+        periodMap[category.periodeSurvei] = (periodMap[category.periodeSurvei] || 0) + category._count.phenomena;
+      }
+    });
+
+    const periodAnalysis = Object.entries(periodMap).map(([periodName, count]) => ({
+      periodId: periodName,
+      name: periodName,
+      count: count,
     }));
 
     // Get user contributions

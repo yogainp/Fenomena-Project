@@ -6,6 +6,9 @@ import { requireRole } from '@/lib/middleware';
 const categorySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
+  periodeSurvei: z.string().optional(),
+  startDate: z.string().datetime().optional().nullable(),
+  endDate: z.string().datetime().optional().nullable(),
 });
 
 export async function GET(request: NextRequest) {
@@ -54,7 +57,13 @@ export async function POST(request: NextRequest) {
     }
 
     const category = await prisma.surveyCategory.create({
-      data: validatedData,
+      data: {
+        name: validatedData.name,
+        description: validatedData.description || null,
+        periodeSurvei: validatedData.periodeSurvei || null,
+        startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,
+        endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
+      },
     });
 
     return NextResponse.json(category, { status: 201 });

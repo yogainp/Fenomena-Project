@@ -11,12 +11,6 @@ interface Category {
   description: string;
 }
 
-interface Period {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-}
 
 interface Region {
   id: string;
@@ -36,13 +30,10 @@ interface Phenomenon {
   title: string;
   description: string;
   categoryId: string;
-  periodId: string;
   regionId: string;
   category: {
     name: string;
-  };
-  period: {
-    name: string;
+    periodeSurvei?: string;
   };
   region: {
     province: string;
@@ -57,7 +48,6 @@ export default function EditPhenomenaPage() {
   const phenomenonId = params.id as string;
   
   const [categories, setCategories] = useState<Category[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [phenomenon, setPhenomenon] = useState<Phenomenon | null>(null);
@@ -69,7 +59,6 @@ export default function EditPhenomenaPage() {
     title: '',
     description: '',
     categoryId: '',
-    periodId: '',
     regionId: '',
   });
 
@@ -83,9 +72,8 @@ export default function EditPhenomenaPage() {
     try {
       setLoading(true);
       
-      const [categoriesRes, periodsRes, regionsRes, userRes, phenomenonRes] = await Promise.all([
+      const [categoriesRes, regionsRes, userRes, phenomenonRes] = await Promise.all([
         fetch('/api/categories'),
-        fetch('/api/periods'),
         fetch('/api/regions'),
         fetch('/api/profile'),
         fetch(`/api/phenomena/${phenomenonId}`),
@@ -96,14 +84,9 @@ export default function EditPhenomenaPage() {
         setCategories(categoriesData);
       }
       
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData);
-      }
-      
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData);
+        setRegions(regionsData.regions || []);
       }
       
       if (userRes.ok) {
@@ -122,7 +105,6 @@ export default function EditPhenomenaPage() {
           title: phenomenonData.title,
           description: phenomenonData.description,
           categoryId: phenomenonData.categoryId,
-          periodId: phenomenonData.periodId,
           regionId: phenomenonData.regionId,
         });
       } else {
@@ -207,13 +189,13 @@ export default function EditPhenomenaPage() {
         )}
 
         <div className="bg-white shadow rounded-lg p-6">
-          {phenomenon && phenomenon.category && phenomenon.period && phenomenon.region && (
+          {phenomenon && phenomenon.category && phenomenon.region && (
             <div className="mb-6 pb-4 border-b border-gray-200">
               <h2 className="text-lg font-medium text-gray-900">Informasi Fenomena</h2>
               <div className="mt-2 text-sm text-gray-500">
                 <span>Kategori: {phenomenon.category.name}</span>
                 <span className="mx-2">•</span>
-                <span>Periode: {phenomenon.period.name}</span>
+                <span>Periode: {phenomenon.category.periodeSurvei || 'N/A'}</span>
                 <span className="mx-2">•</span>
                 <span>Wilayah: {phenomenon.region.city}, {phenomenon.region.province}</span>
               </div>
@@ -249,44 +231,23 @@ export default function EditPhenomenaPage() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kategori Survei <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Pilih Kategori</option>
-                  {categories?.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  )) || []}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Periode Survei <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.periodId}
-                  onChange={(e) => setFormData({ ...formData, periodId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Pilih Periode</option>
-                  {periods?.map((period) => (
-                    <option key={period.id} value={period.id}>
-                      {period.name}
-                    </option>
-                  )) || []}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Kategori Survei <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.categoryId}
+                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Pilih Kategori</option>
+                {categories?.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                )) || []}
+              </select>
             </div>
 
             <div>

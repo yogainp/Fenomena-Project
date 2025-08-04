@@ -18,11 +18,21 @@ export async function GET(request: NextRequest) {
     if (categoryId && categoryId !== 'all') {
       whereConditions.categoryId = categoryId;
     }
-    if (periodId && periodId !== 'all') {
-      whereConditions.periodId = periodId;
-    }
     if (regionId && regionId !== 'all') {
       whereConditions.regionId = regionId;
+    }
+    
+    // Handle date filtering if provided
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    if (startDate || endDate) {
+      whereConditions.createdAt = {};
+      if (startDate) {
+        whereConditions.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        whereConditions.createdAt.lte = new Date(endDate);
+      }
     }
 
     // Get phenomena texts for analysis with optional filtering
@@ -32,16 +42,22 @@ export async function GET(request: NextRequest) {
         id: true,
         title: true,
         description: true,
+        createdAt: true,
         category: {
           select: {
             id: true,
             name: true,
+            periodeSurvei: true,
+            startDate: true,
+            endDate: true,
           },
         },
-        period: {
+        region: {
           select: {
             id: true,
-            name: true,
+            city: true,
+            province: true,
+            regionCode: true,
           },
         },
       },
@@ -221,9 +237,10 @@ export async function GET(request: NextRequest) {
       proximityAnalysis,
       filterInfo: {
         categoryId: categoryId || 'all',
-        periodId: periodId || 'all',
         regionId: regionId || 'all',
-        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(periodId && periodId !== 'all') || Boolean(regionId && regionId !== 'all')
+        startDate: startDate || '',
+        endDate: endDate || '',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(startDate) || Boolean(endDate)
       },
     });
 

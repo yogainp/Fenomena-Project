@@ -7,7 +7,7 @@ const phenomenonSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   categoryId: z.string().min(1, 'Category is required'),
-  periodId: z.string().min(1, 'Period is required'),
+  regionId: z.string().min(1, 'Region is required'),
 });
 
 export async function GET(
@@ -29,12 +29,7 @@ export async function GET(
           select: {
             id: true,
             name: true,
-          },
-        },
-        period: {
-          select: {
-            id: true,
-            name: true,
+            periodeSurvei: true,
             startDate: true,
             endDate: true,
           },
@@ -95,12 +90,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     }
 
-    // Verify period exists
-    const period = await prisma.surveyPeriod.findUnique({
-      where: { id: validatedData.periodId },
+    // Verify region exists
+    const region = await prisma.region.findUnique({
+      where: { id: validatedData.regionId },
     });
-    if (!period) {
-      return NextResponse.json({ error: 'Period not found' }, { status: 404 });
+    if (!region) {
+      return NextResponse.json({ error: 'Region not found' }, { status: 404 });
     }
 
     const phenomenon = await prisma.phenomenon.update({
@@ -110,11 +105,16 @@ export async function PUT(
         category: {
           select: {
             name: true,
+            periodeSurvei: true,
+            startDate: true,
+            endDate: true,
           },
         },
-        period: {
+        region: {
           select: {
-            name: true,
+            province: true,
+            city: true,
+            regionCode: true,
           },
         },
       },
