@@ -78,6 +78,10 @@ model Phenomenon {
 
   analysisResults AnalysisResult[]
 
+  // Performance indexes for insight generation
+  @@index([categoryId, regionId])
+  @@index([createdAt])
+  @@index([userId])
   @@map("phenomena")
 }
 
@@ -117,6 +121,9 @@ model CatatanSurvei {
 
   // Unique constraint untuk mencegah duplikasi responden
   @@unique([categoryId, nomorResponden])
+  // Performance indexes for insight generation
+  @@index([categoryId, regionId])
+  @@index([createdAt])
   @@map("catatan_survei")
 }
 
@@ -167,5 +174,10 @@ model ScrappingBerita {
   // Optional relation to analysis results for future integration
   analysisResults AnalysisResult[]
 
+  // Performance indexes for insight generation
+  @@index([tanggalBerita])
+  @@index([matchedKeywords])
+  @@index([judul])
+  @@index([portalBerita])
   @@map("scrapping_berita")
 }

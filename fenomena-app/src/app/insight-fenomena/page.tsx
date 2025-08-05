@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 interface InsightMetrics {
@@ -63,9 +63,26 @@ interface InsightSummary {
   totalSurveyNotes: number;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+interface ProcessingInfo {
+  failedInsights: number;
+  processedInsights: number;
+  requestedInsights: number;
+}
+
 export default function InsightFenomenaPage() {
   const [insights, setInsights] = useState<FenomenaInsight[]>([]);
   const [summary, setSummary] = useState<InsightSummary | null>(null);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [processing, setProcessing] = useState<ProcessingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedInsight, setSelectedInsight] = useState<FenomenaInsight | null>(null);
@@ -73,38 +90,15 @@ export default function InsightFenomenaPage() {
   // Filter states
   const [categoryId, setCategoryId] = useState('all');
   const [regionId, setRegionId] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   
   // Filter options
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [regions, setRegions] = useState<Array<{ id: string; city: string; province: string }>>([]);
+  const [filtersLoading, setFiltersLoading] = useState(true);
 
-  useEffect(() => {
-    fetchFilterOptions();
-    fetchInsights();
-  }, [categoryId, regionId]);
-
-  const fetchFilterOptions = async () => {
-    try {
-      const [categoriesRes, regionsRes] = await Promise.all([
-        fetch('/api/admin/categories'),
-        fetch('/api/admin/regions'),
-      ]);
-
-      if (categoriesRes.ok) {
-        const categoriesData = await categoriesRes.json();
-        setCategories(categoriesData || []);
-      }
-
-      if (regionsRes.ok) {
-        const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch filter options:', err);
-    }
-  };
-
-  const fetchInsights = async () => {
+  const fetchInsights = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -112,17 +106,21 @@ export default function InsightFenomenaPage() {
       const params = new URLSearchParams();
       if (categoryId !== 'all') params.append('categoryId', categoryId);
       if (regionId !== 'all') params.append('regionId', regionId);
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
       
       const response = await fetch(`/api/analytics/fenomena-insights?${params.toString()}`);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch insights');
+        throw new Error(errorData.error || errorData.details || 'Failed to fetch insights');
       }
       
       const data = await response.json();
       setInsights(data.insights || []);
       setSummary(data.summary || null);
+      setPagination(data.pagination || null);
+      setProcessing(data.processing || null);
       
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -131,7 +129,54 @@ export default function InsightFenomenaPage() {
     } finally {
       setLoading(false);
     }
+  }, [categoryId, regionId, currentPage, pageSize]);
+
+  const fetchFilterOptions = async () => {
+    try {
+      setFiltersLoading(true);
+      const [categoriesRes, regionsRes] = await Promise.all([
+        fetch('/api/categories'),
+        fetch('/api/regions'),
+      ]);
+
+      if (categoriesRes.ok) {
+        const categoriesData = await categoriesRes.json();
+        console.log('Categories data:', categoriesData);
+        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      } else {
+        console.error('Failed to fetch categories:', categoriesRes.status, categoriesRes.statusText);
+        setCategories([]);
+      }
+
+      if (regionsRes.ok) {
+        const regionsData = await regionsRes.json();
+        console.log('Regions data:', regionsData);
+        // API regions return array directly, not nested in 'regions' property
+        setRegions(Array.isArray(regionsData) ? regionsData : []);
+      } else {
+        console.error('Failed to fetch regions:', regionsRes.status, regionsRes.statusText);
+        setRegions([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch filter options:', err);
+      setCategories([]);
+      setRegions([]);
+    } finally {
+      setFiltersLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [categoryId, regionId]);
+
+  useEffect(() => {
+    fetchInsights();
+  }, [fetchInsights]);
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600 bg-green-100';
@@ -221,14 +266,19 @@ export default function InsightFenomenaPage() {
                     id="category"
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={filtersLoading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    <option value="all">Semua Kategori</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
+                    <option value="all">{filtersLoading ? 'Loading...' : 'Semua Kategori'}</option>
+                    {categories.length > 0 ? (
+                      categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))
+                    ) : (
+                      !filtersLoading && <option disabled>No categories available</option>
+                    )}
                   </select>
                 </div>
 
@@ -240,19 +290,102 @@ export default function InsightFenomenaPage() {
                     id="region"
                     value={regionId}
                     onChange={(e) => setRegionId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={filtersLoading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
-                    <option value="all">Semua Wilayah</option>
-                    {regions.map((region) => (
-                      <option key={region.id} value={region.id}>
-                        {region.city}, {region.province}
-                      </option>
-                    ))}
+                    <option value="all">{filtersLoading ? 'Loading...' : 'Semua Wilayah'}</option>
+                    {regions.length > 0 ? (
+                      regions.map((region) => (
+                        <option key={region.id} value={region.id}>
+                          {region.city}, {region.province}
+                        </option>
+                      ))
+                    ) : (
+                      !filtersLoading && <option disabled>No regions available</option>
+                    )}
                   </select>
                 </div>
               </div>
+              
+              {/* Page Size Control - Separated with more margin */}
+              <div className="mt-6 max-w-xs">
+                <label htmlFor="pageSize" className="block text-sm font-medium text-gray-700 mb-1">
+                  Items per Page
+                </label>
+                <select
+                  id="pageSize"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(parseInt(e.target.value));
+                    setCurrentPage(1); // Reset to first page
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={3}>3 per halaman</option>
+                  <option value={5}>5 per halaman</option>
+                  <option value={10}>10 per halaman</option>
+                </select>
+              </div>
             </div>
+            
+            {/* Processing Info */}
+            {processing && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                <div className="flex justify-between text-sm text-blue-800">
+                  <span>Processed: {processing.processedInsights}/{processing.requestedInsights}</span>
+                  {processing.failedInsights > 0 && (
+                    <span className="text-red-600">Failed: {processing.failedInsights}</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Pagination Controls */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="bg-white shadow rounded-lg mb-6">
+              <div className="px-6 py-4">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-700">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} phenomena
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={!pagination.hasPrev}
+                      className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={!pagination.hasPrev}
+                      className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded">
+                      {pagination.page} of {pagination.totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={!pagination.hasNext}
+                      className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(pagination.totalPages)}
+                      disabled={!pagination.hasNext}
+                      className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Loading State */}
           {loading && (

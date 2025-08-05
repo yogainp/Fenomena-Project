@@ -4,7 +4,14 @@ import { requireAuth } from '@/lib/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    requireAuth(request);
+    // Optional auth - allow access even without authentication
+    // This is for public pages like insight-fenomena
+    try {
+      requireAuth(request);
+    } catch (authError) {
+      // Continue without auth for public access
+      console.log('No auth provided, allowing public access to categories');
+    }
 
     const categories = await prisma.surveyCategory.findMany({
       select: {
@@ -19,9 +26,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(categories);
   } catch (error: any) {
-    if (error.message.includes('required')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
-    }
     console.error('Get categories error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
