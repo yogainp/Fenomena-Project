@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
     const regionId = searchParams.get('regionId');
-    const periodId = searchParams.get('periodId');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -19,8 +20,14 @@ export async function GET(request: NextRequest) {
     if (regionId && regionId !== 'all') {
       whereConditions.regionId = regionId;
     }
-    if (periodId && periodId !== 'all') {
-      whereConditions.periodId = periodId;
+    if (startDate || endDate) {
+      whereConditions.createdAt = {};
+      if (startDate) {
+        whereConditions.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        whereConditions.createdAt.lte = new Date(endDate + 'T23:59:59.999Z');
+      }
     }
 
     // Apply role-based data filtering
@@ -59,14 +66,6 @@ export async function GET(request: NextRequest) {
             province: true,
             city: true,
             regionCode: true,
-          },
-        },
-        period: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
           },
         },
         user: {
@@ -278,8 +277,9 @@ export async function GET(request: NextRequest) {
       filterInfo: {
         categoryId: categoryId || 'all',
         regionId: regionId || 'all',
-        periodId: periodId || 'all',
-        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(periodId && periodId !== 'all')
+        startDate: startDate || '',
+        endDate: endDate || '',
+        isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(startDate) || Boolean(endDate)
       },
     });
 
