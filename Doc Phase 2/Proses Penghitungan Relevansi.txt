@@ -1,0 +1,84 @@
+● Berdasarkan analisis kode, sistem menghitung relevansi menggunakan pendekatan keyword extraction otomatis, bukan kata-kata yang telah ditetapkan
+  sebelumnya. Berikut detail prosesnya:
+
+  Cara Sistem Menghitung Relevansi
+
+  1. Keyword Extraction Process
+
+  // Lokasi: route.ts:82-89
+  function extractKeywords(text: string): string[] {
+    const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+    const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan',
+  'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat',       
+  'cukup', 'hanya', 'belum', 'banyak'];
+
+    return cleanText.split(/\s+/)
+      .filter(word => word.length > 3 && !stopWords.includes(word))
+      .filter(word => !word.match(/^\d+$/));
+  }
+
+  2. Sumber Keyword untuk Fenomena
+
+  - Input: ${phenomenon.title} ${phenomenon.description} (gabungan judul + deskripsi)
+  - Proses: Extract semua kata > 3 karakter, hapus stopwords dan angka
+  - Hasil: Array keyword dari fenomena
+
+  3. Proses Matching dengan Berita
+
+  // Lokasi: route.ts:332-334
+  const newsKeywords = extractKeywords(`${news.judul} ${news.isi}`);
+  const keywordOverlap = calculateKeywordOverlap(phenomenonKeywords, newsKeywords);
+
+  4. Algoritma Keyword Overlap
+
+  // Lokasi: route.ts:112-119
+  function calculateKeywordOverlap(keywords1: string[], keywords2: string[]): number {
+    const set1 = new Set(keywords1);
+    const set2 = new Set(keywords2);
+    const intersection = new Set(Array.from(set1).filter(x => set2.has(x)));
+    const union = new Set([...Array.from(set1), ...Array.from(set2)]);
+
+    return union.size > 0 ? (intersection.size / union.size) * 100 : 0;
+  }
+
+  Formula: (Kata yang sama / Total kata unik) × 100
+
+  5. Relevance Score Calculation
+
+  // Lokasi: route.ts:352-357
+  const relevanceScore = (
+    keywordOverlap * 0.4 +           // 40% - keyword similarity
+    temporalRelevance * 0.3 +        // 30% - time proximity  
+    geographicRelevance * 0.2 +      // 20% - location (fixed 75%)
+    sentimentMatch * 0.1             // 10% - sentiment alignment
+  );
+
+  6. Proses untuk Catatan Survei
+
+  // Lokasi: route.ts:374-377
+  const noteKeywords = extractKeywords(note.catatan);
+  const relevanceScore = calculateKeywordOverlap(phenomenonKeywords, noteKeywords);
+
+  Karakteristik Sistem Saat Ini
+
+  ✅ Kelebihan:
+
+  - Otomatis: Tidak perlu manual define keyword
+  - Fleksibel: Beradaptasi dengan konten apa pun
+  - Komprehensif: Menggunakan seluruh teks fenomena sebagai basis
+
+  ❌ Kelemahan:
+
+  - Tidak ada bobot keyword: Semua kata dianggap sama penting
+  - Stopwords terbatas: Hanya 41 kata Bahasa Indonesia
+  - Tidak ada sinonim: "ekonomi" vs "perekonomian" dianggap berbeda
+  - Tidak ada stemming: "berkembang" vs "perkembangan" berbeda
+  - Geographic relevance fixed: Selalu 75%, tidak dinamis
+
+  Improvement yang Bisa Dilakukan
+
+  1. Weighted Keywords: Kata di judul lebih penting dari deskripsi
+  2. Stemming/Lemmatization: Mengenali bentuk dasar kata
+  3. Synonym Detection: Mengenali kata bersinonim
+  4. Domain-specific keywords: Kata kunci khusus untuk sektor tertentu
+  5. Dynamic geographic scoring: Berdasarkan lokasi sebenarnya

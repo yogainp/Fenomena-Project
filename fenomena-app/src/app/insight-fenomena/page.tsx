@@ -223,10 +223,22 @@ export default function InsightFenomenaPage() {
         <div className="px-4 py-6 sm:px-0">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">AI-Powered Insight Fenomena</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Analisis mendalam fenomena berdasarkan korelasi data survei, catatan responden, dan berita media massa
-            </p>
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">AI-Powered Insight Fenomena</h1>
+                <p className="mt-2 text-sm text-gray-600">
+                  Analisis mendalam fenomena berdasarkan korelasi data survei, catatan responden, dan berita media massa
+                </p>
+              </div>
+              <div className="ml-6">
+                <Link 
+                  href="/insight-fenomena/metadata-insight" 
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                >
+                  📊 Lihat Metadata Scoring
+                </Link>
+              </div>
+            </div>
           </div>
 
           {/* Summary Cards */}
