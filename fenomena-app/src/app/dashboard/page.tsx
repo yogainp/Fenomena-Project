@@ -256,17 +256,12 @@ export default function DashboardPage() {
                     Panel Admin
                   </h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    Kelola kategori survei, periode survei, pengguna, wilayah, dan pengaturan sistem
+                    Kelola kategori survei, pengguna, wilayah, dan pengaturan sistem
                   </p>
                   <div className="mt-4 space-x-4">
                     <Link href="/admin/categories">
                       <button className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
                         Kelola Kategori
-                      </button>
-                    </Link>
-                    <Link href="/admin/periods">
-                      <button className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
-                        Kelola Periode
                       </button>
                     </Link>
                     <Link href="/admin/users">
