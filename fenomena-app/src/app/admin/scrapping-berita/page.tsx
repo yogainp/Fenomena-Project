@@ -332,12 +332,15 @@ export default function ScrappingBeritaPage() {
                 <input
                   type="number"
                   min="1"
-                  max="50"
+                  max="200"
                   value={scrapingConfig.maxPages}
                   onChange={(e) => setScrapingConfig({ ...scrapingConfig, maxPages: parseInt(e.target.value) || 1 })}
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={scraping}
                 />
+                <p className="mt-1 text-sm text-gray-500">
+                  Maksimum halaman yang bisa di scraping adalah 200 halaman.
+                </p>
               </div>
               
               <div>

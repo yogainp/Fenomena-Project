@@ -189,6 +189,36 @@ export default function KatalogBeritaPage() {
     }
   };
 
+  const handleSingleDelete = async (beritaId: string, beritaTitle: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete this news article: "${beritaTitle}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+    
+    try {
+      setFormLoading(true);
+      setError('');
+      
+      const response = await makeAuthenticatedRequest(`/api/admin/scrapping-berita/${beritaId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete news article');
+      }
+      
+      setSuccessMessage('News article deleted successfully');
+      fetchBerita();
+      
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
       year: 'numeric',
@@ -477,6 +507,13 @@ export default function KatalogBeritaPage() {
                         >
                           View Original →
                         </a>
+                        <button
+                          onClick={() => handleSingleDelete(berita.id, berita.judul)}
+                          disabled={formLoading}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50 text-left"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   </div>

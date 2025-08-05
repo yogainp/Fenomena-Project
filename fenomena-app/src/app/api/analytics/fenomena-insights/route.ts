@@ -23,8 +23,7 @@ interface FenomenaInsight {
     id: string;
     title: string;
     description: string;
-    category: { name: string };
-    period: { name: string; startDate: Date; endDate: Date };
+    category: { name: string; startDate?: Date; endDate?: Date };
     region: { city: string; province: string };
   };
   metrics: InsightMetrics;
@@ -100,7 +99,6 @@ export async function GET(request: NextRequest) {
       where: whereConditions,
       include: {
         category: true,
-        period: true,
         region: true,
         user: { select: { id: true, username: true } },
       },
@@ -155,9 +153,23 @@ export async function GET(request: NextRequest) {
       return union.size > 0 ? (intersection.size / union.size) * 100 : 0;
     }
 
-    function calculateTemporalRelevance(phenomenonDate: Date, newsDate: Date, surveyPeriod: { startDate: Date; endDate: Date }): number {
-      const surveyStart = surveyPeriod.startDate.getTime();
-      const surveyEnd = surveyPeriod.endDate.getTime();
+    function calculateTemporalRelevance(phenomenonDate: Date, newsDate: Date, surveyCategory: { startDate?: Date; endDate?: Date }): number {
+      // If no date range is defined in category, use phenomenon creation date
+      if (!surveyCategory.startDate || !surveyCategory.endDate) {
+        const phenomenonTime = phenomenonDate.getTime();
+        const newsTime = newsDate.getTime();
+        const timeDiff = Math.abs(phenomenonTime - newsTime);
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        
+        // Score based on how close the news is to phenomenon creation
+        if (timeDiff <= thirtyDays) {
+          return Math.max(0, 100 - (timeDiff / thirtyDays) * 100);
+        }
+        return 0;
+      }
+      
+      const surveyStart = surveyCategory.startDate.getTime();
+      const surveyEnd = surveyCategory.endDate.getTime();
       const newsTime = newsDate.getTime();
       
       // Check if news is within survey period or close to it (within 30 days)
@@ -209,7 +221,6 @@ export async function GET(request: NextRequest) {
       const surveyNotes = await prisma.catatanSurvei.findMany({
         where: {
           categoryId: phenomenon.categoryId,
-          periodId: phenomenon.periodId,
           regionId: phenomenon.regionId,
         },
         take: 10,
@@ -222,7 +233,7 @@ export async function GET(request: NextRequest) {
         const temporalRelevance = calculateTemporalRelevance(
           phenomenon.createdAt,
           news.tanggalBerita,
-          phenomenon.period
+          phenomenon.category
         );
         
         const newsSentiment = getSentimentScore(`${news.judul} ${news.isi}`);
@@ -361,11 +372,10 @@ export async function GET(request: NextRequest) {
           id: phenomenon.id,
           title: phenomenon.title,
           description: phenomenon.description,
-          category: { name: phenomenon.category.name },
-          period: { 
-            name: phenomenon.period.name, 
-            startDate: phenomenon.period.startDate, 
-            endDate: phenomenon.period.endDate 
+          category: { 
+            name: phenomenon.category.name,
+            startDate: phenomenon.category.startDate, 
+            endDate: phenomenon.category.endDate 
           },
           region: { city: phenomenon.region.city, province: phenomenon.region.province },
         },

@@ -18,7 +18,7 @@ const executeScrapingSchema = z.object({
       message: `Portal URL must be one of: ${ALLOWED_PORTALS.join(', ')}`
     }
   ),
-  maxPages: z.number().min(1).max(50).optional().default(10),
+  maxPages: z.number().min(1).max(200).optional().default(10),
   delayMs: z.number().min(1000).max(10000).optional().default(2000),
 });
 

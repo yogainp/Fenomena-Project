@@ -25,6 +25,42 @@ interface ScrapingResult {
   scrapedItems: ScrapedNewsItem[];
 }
 
+// Helper function to check for duplicate articles
+async function checkDuplicateArticle(
+  title: string, 
+  url: string, 
+  processedUrls: Set<string>, 
+  processedTitles: Set<string>
+): Promise<boolean> {
+  // Normalize data for comparison
+  const normalizedTitle = title.toLowerCase().trim();
+  const normalizedUrl = url.toLowerCase();
+  
+  // Check in-memory sets first (fastest)
+  if (processedUrls.has(normalizedUrl) || processedTitles.has(normalizedTitle)) {
+    return true;
+  }
+  
+  // Check database for existing articles
+  const existingArticle = await prisma.scrappingBerita.findFirst({
+    where: {
+      OR: [
+        { linkBerita: url },
+        { judul: title }
+      ]
+    }
+  });
+  
+  if (existingArticle) {
+    // Add to processed sets to avoid future database queries
+    processedUrls.add(normalizedUrl);
+    processedTitles.add(normalizedTitle);
+    return true;
+  }
+  
+  return false;
+}
+
 export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<ScrapingResult> {
   const { portalUrl, maxPages, delayMs } = options;
   
@@ -75,13 +111,17 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
     
     const page = await context.newPage();
 
+    // Create tracking sets for duplicate prevention across the entire scraping session
+    const processedUrls = new Set<string>();
+    const processedTitles = new Set<string>();
+
     // Scrape based on portal type
     if (portalUrl.includes('pontianakpost.jawapos.com')) {
-      await scrapePontianakPost(page, portalUrl, maxPages, delayMs, keywordList, result);
+      await scrapePontianakPost(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
     } else if (portalUrl.includes('kalbaronline.com')) {
-      await scrapeKalbarOnline(page, portalUrl, maxPages, delayMs, keywordList, result);
+      await scrapeKalbarOnline(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
     } else if (portalUrl.includes('kalbar.antaranews.com')) {
-      await scrapeAntaraNews(page, portalUrl, maxPages, delayMs, keywordList, result);
+      await scrapeAntaraNews(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
     } else {
       throw new Error('Unsupported portal. Currently only supports pontianakpost.jawapos.com, kalbaronline.com, and kalbar.antaranews.com');
     }
@@ -313,7 +353,9 @@ async function scrapePontianakPost(
   maxPages: number, 
   delayMs: number,
   keywords: string[],
-  result: ScrapingResult
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>
 ): Promise<void> {
   let currentPage = 1;
 
@@ -435,6 +477,13 @@ async function scrapePontianakPost(
       if (articles.length === 0) {
         console.log(`No articles found on page ${currentPage}, stopping pagination`);
         break;
+      }
+      
+      // Enhanced logging for pagination continuation
+      if (relevantArticles.length === 0) {
+        console.log(`No relevant articles found on page ${currentPage}, but continuing to next page...`);
+      } else {
+        console.log(`Processing ${relevantArticles.length} relevant articles from page ${currentPage}...`);
       }
 
       // Scrape content from relevant articles
@@ -769,6 +818,24 @@ async function scrapePontianakPost(
           );
 
           if (matchedKeywords.length > 0) {
+            // Check for duplicates before processing
+            const isDuplicate = await checkDuplicateArticle(
+              articleData.title, 
+              articleData.link, 
+              processedUrls, 
+              processedTitles
+            );
+            
+            if (isDuplicate) {
+              result.duplicates++;
+              console.log(`⚠ Skipping duplicate: ${articleData.title.substring(0, 50)}...`);
+              continue;
+            }
+            
+            // Add to processed sets
+            processedUrls.add(articleData.link.toLowerCase());
+            processedTitles.add(articleData.title.toLowerCase().trim());
+
             const scrapedItem: ScrapedNewsItem = {
               title: articleData.title,
               content: articleData.content,
@@ -855,7 +922,9 @@ async function scrapeKalbarOnline(
   maxPages: number, 
   delayMs: number,
   keywords: string[],
-  result: ScrapingResult
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>
 ): Promise<void> {
   let currentPage = 1;
 
@@ -997,6 +1066,13 @@ async function scrapeKalbarOnline(
       if (articles.length === 0) {
         console.log(`No articles found on page ${currentPage}, stopping pagination`);
         break;
+      }
+      
+      // Enhanced logging for pagination continuation
+      if (relevantArticles.length === 0) {
+        console.log(`No relevant articles found on Kalbar Online page ${currentPage}, but continuing to next page...`);
+      } else {
+        console.log(`Processing ${relevantArticles.length} relevant articles from Kalbar Online page ${currentPage}...`);
       }
 
       // Scrape content from relevant articles
@@ -1169,6 +1245,24 @@ async function scrapeKalbarOnline(
           );
 
           if (matchedKeywords.length > 0) {
+            // Check for duplicates before processing
+            const isDuplicate = await checkDuplicateArticle(
+              articleData.title, 
+              articleData.link, 
+              processedUrls, 
+              processedTitles
+            );
+            
+            if (isDuplicate) {
+              result.duplicates++;
+              console.log(`⚠ Skipping duplicate from Kalbar Online: ${articleData.title.substring(0, 50)}...`);
+              continue;
+            }
+            
+            // Add to processed sets
+            processedUrls.add(articleData.link.toLowerCase());
+            processedTitles.add(articleData.title.toLowerCase().trim());
+
             const scrapedItem: ScrapedNewsItem = {
               title: articleData.title,
               content: cleanContent(articleData.content),
@@ -1255,7 +1349,9 @@ async function scrapeAntaraNews(
   maxPages: number, 
   delayMs: number,
   keywords: string[],
-  result: ScrapingResult
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>
 ): Promise<void> {
   let currentPage = 1;
 
@@ -1389,6 +1485,13 @@ async function scrapeAntaraNews(
       if (articles.length === 0) {
         console.log(`No articles found on page ${currentPage}, stopping pagination`);
         break;
+      }
+      
+      // Enhanced logging for pagination continuation
+      if (relevantArticles.length === 0) {
+        console.log(`No relevant articles found on Antara News page ${currentPage}, but continuing to next page...`);
+      } else {
+        console.log(`Processing ${relevantArticles.length} relevant articles from Antara News page ${currentPage}...`);
       }
 
       // Scrape content from relevant articles
@@ -1583,6 +1686,24 @@ async function scrapeAntaraNews(
           );
 
           if (matchedKeywords.length > 0) {
+            // Check for duplicates before processing
+            const isDuplicate = await checkDuplicateArticle(
+              articleData.title, 
+              articleData.link, 
+              processedUrls, 
+              processedTitles
+            );
+            
+            if (isDuplicate) {
+              result.duplicates++;
+              console.log(`⚠ Skipping duplicate from Antara News: ${articleData.title.substring(0, 50)}...`);
+              continue;
+            }
+            
+            // Add to processed sets
+            processedUrls.add(articleData.link.toLowerCase());
+            processedTitles.add(articleData.title.toLowerCase().trim());
+
             const scrapedItem: ScrapedNewsItem = {
               title: articleData.title,
               content: cleanContent(articleData.content),

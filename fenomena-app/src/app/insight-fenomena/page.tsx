@@ -33,8 +33,7 @@ interface FenomenaInsight {
     id: string;
     title: string;
     description: string;
-    category: { name: string };
-    period: { name: string };
+    category: { name: string; startDate?: Date; endDate?: Date };
     region: { city: string; province: string };
   };
   metrics: InsightMetrics;
@@ -73,35 +72,27 @@ export default function InsightFenomenaPage() {
   
   // Filter states
   const [categoryId, setCategoryId] = useState('all');
-  const [periodId, setPeriodId] = useState('all');
   const [regionId, setRegionId] = useState('all');
   
   // Filter options
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
-  const [periods, setPeriods] = useState<Array<{ id: string; name: string }>>([]);
   const [regions, setRegions] = useState<Array<{ id: string; city: string; province: string }>>([]);
 
   useEffect(() => {
     fetchFilterOptions();
     fetchInsights();
-  }, [categoryId, periodId, regionId]);
+  }, [categoryId, regionId]);
 
   const fetchFilterOptions = async () => {
     try {
-      const [categoriesRes, periodsRes, regionsRes] = await Promise.all([
+      const [categoriesRes, regionsRes] = await Promise.all([
         fetch('/api/admin/categories'),
-        fetch('/api/admin/periods'),
         fetch('/api/admin/regions'),
       ]);
 
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json();
-        setCategories(categoriesData.categories || []);
-      }
-
-      if (periodsRes.ok) {
-        const periodsData = await periodsRes.json();
-        setPeriods(periodsData.periods || []);
+        setCategories(categoriesData || []);
       }
 
       if (regionsRes.ok) {
@@ -120,7 +111,6 @@ export default function InsightFenomenaPage() {
       
       const params = new URLSearchParams();
       if (categoryId !== 'all') params.append('categoryId', categoryId);
-      if (periodId !== 'all') params.append('periodId', periodId);
       if (regionId !== 'all') params.append('regionId', regionId);
       
       const response = await fetch(`/api/analytics/fenomena-insights?${params.toString()}`);
@@ -222,7 +212,7 @@ export default function InsightFenomenaPage() {
           <div className="bg-white shadow rounded-lg mb-6">
             <div className="p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Filter Analisis</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                     Kategori Survei
@@ -237,25 +227,6 @@ export default function InsightFenomenaPage() {
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="period" className="block text-sm font-medium text-gray-700 mb-1">
-                    Periode Survei
-                  </label>
-                  <select
-                    id="period"
-                    value={periodId}
-                    onChange={(e) => setPeriodId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">Semua Periode</option>
-                    {periods.map((period) => (
-                      <option key={period.id} value={period.id}>
-                        {period.name}
                       </option>
                     ))}
                   </select>
@@ -318,9 +289,6 @@ export default function InsightFenomenaPage() {
                         <div className="flex flex-wrap gap-2 text-sm text-gray-500">
                           <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
                             {insight.phenomenon.category.name}
-                          </span>
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
-                            {insight.phenomenon.period.name}
                           </span>
                           <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded">
                             {insight.phenomenon.region.city}, {insight.phenomenon.region.province}

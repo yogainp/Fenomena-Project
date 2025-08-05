@@ -17,7 +17,8 @@
       "Bash(taskkill:*)",
       "WebFetch(domain:kalbar.antaranews.com)",
       "Bash(node:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git restore:*)"
     ],
     "deny": []
   }

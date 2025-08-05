@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     requireRole(request, 'ADMIN');
 
-    const periods = await prisma.surveyPeriod.findMany({
+    const categories = await prisma.surveyCategory.findMany({
       orderBy: {
         startDate: 'desc',
       },
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(periods);
+    return NextResponse.json({ periods: categories });
   } catch (error: any) {
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });
@@ -49,18 +49,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = periodSchema.parse(body);
 
-    const existingPeriod = await prisma.surveyPeriod.findUnique({
+    const existingCategory = await prisma.surveyCategory.findUnique({
       where: { name: validatedData.name },
     });
 
-    if (existingPeriod) {
+    if (existingCategory) {
       return NextResponse.json(
-        { error: 'Period with this name already exists' },
+        { error: 'Category with this name already exists' },
         { status: 400 }
       );
     }
 
-    const period = await prisma.surveyPeriod.create({
+    const period = await prisma.surveyCategory.create({
       data: {
         name: validatedData.name,
         startDate: new Date(validatedData.startDate),
