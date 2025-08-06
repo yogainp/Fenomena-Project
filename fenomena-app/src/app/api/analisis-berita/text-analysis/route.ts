@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const customKeywordsParam = searchParams.get('customKeywords');
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -120,9 +121,7 @@ export async function GET(request: NextRequest) {
       return 'neutral';
     }
 
-    function analyzeProximityWords(text: string, windowSize: number = 5): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
-      // Key terms relevant to news analysis
-      const targetKeywords = ['peningkatan', 'penurunan', 'kenaikan', 'penurunan', 'krisis', 'pembangunan', 'ekonomi', 'politik', 'sosial'];
+    function analyzeProximityWords(text: string, targetKeywords: string[], windowSize: number = 5): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
       const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
       const words = cleanText.split(/\s+/).filter(word => word.length > 2);
       
@@ -162,11 +161,24 @@ export async function GET(request: NextRequest) {
     let allWords: string[] = [];
     const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
     const portalKeywords: { [portal: string]: string[] } = {};
+    // Parse custom keywords or use defaults
+    const defaultKeywords = ['peningkatan', 'penurunan', 'kenaikan', 'krisis', 'pembangunan', 'ekonomi', 'politik', 'sosial'];
+    let customKeywords: string[] = [];
+    
+    if (customKeywordsParam) {
+      customKeywords = customKeywordsParam
+        .split(',')
+        .map(keyword => keyword.trim().toLowerCase())
+        .filter(keyword => keyword.length > 0);
+    }
+    
+    const allTargetKeywords = [...defaultKeywords, ...customKeywords];
+    const uniqueTargetKeywords = [...new Set(allTargetKeywords)];
+
     const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
 
     // Initialize proximity analysis
-    const targetKeywords = ['peningkatan', 'penurunan', 'kenaikan', 'penurunan', 'krisis', 'pembangunan', 'ekonomi', 'politik', 'sosial'];
-    targetKeywords.forEach(keyword => {
+    uniqueTargetKeywords.forEach(keyword => {
       proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
     });
 
@@ -188,7 +200,7 @@ export async function GET(request: NextRequest) {
       portalKeywords[portalName] = portalKeywords[portalName].concat(words);
       
       // Proximity analysis
-      const proximityResults = analyzeProximityWords(combinedText);
+      const proximityResults = analyzeProximityWords(combinedText, uniqueTargetKeywords);
       Object.keys(proximityResults).forEach(keyword => {
         if (proximityAnalysisResults[keyword]) {
           proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
@@ -261,6 +273,12 @@ export async function GET(request: NextRequest) {
         startDate: startDate || '',
         endDate: endDate || '',
         isFiltered: Boolean(portalBerita && portalBerita !== 'all') || Boolean(keyword) || Boolean(startDate) || Boolean(endDate)
+      },
+      proximityKeywordsInfo: {
+        defaultKeywords,
+        customKeywords,
+        totalKeywords: uniqueTargetKeywords,
+        hasCustomKeywords: customKeywords.length > 0
       },
     });
 

@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const regionId = searchParams.get('regionId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const customKeywordsParam = searchParams.get('customKeywords');
 
     // Build filter conditions
     const whereConditions: any = {};
@@ -122,8 +123,7 @@ export async function GET(request: NextRequest) {
       return 'neutral';
     }
 
-    function analyzeProximityWords(text: string, windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
-      const targetKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh', 'masalah', 'solusi', 'perbaikan'];
+    function analyzeProximityWords(text: string, targetKeywords: string[], windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
       const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
       const words = cleanText.split(/\s+/).filter(word => word.length > 2);
       const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
@@ -154,21 +154,31 @@ export async function GET(request: NextRequest) {
       return result;
     }
 
+    // Parse custom keywords or use defaults
+    const defaultKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh', 'masalah', 'solusi', 'perbaikan'];
+    let customKeywords: string[] = [];
+    
+    if (customKeywordsParam) {
+      customKeywords = customKeywordsParam
+        .split(',')
+        .map(keyword => keyword.trim().toLowerCase())
+        .filter(keyword => keyword.length > 0);
+    }
+    
+    const allTargetKeywords = [...defaultKeywords, ...customKeywords];
+    const uniqueTargetKeywords = [...new Set(allTargetKeywords)];
+
     // Analyze all catatan survei texts
     let allWords: string[] = [];
     const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
     const categoryKeywords: { [category: string]: string[] } = {};
     const regionKeywords: { [region: string]: string[] } = {};
-    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {
-      'peningkatan': { proximityWords: {}, totalOccurrences: 0 },
-      'penurunan': { proximityWords: {}, totalOccurrences: 0 },
-      'naik': { proximityWords: {}, totalOccurrences: 0 },
-      'turun': { proximityWords: {}, totalOccurrences: 0 },
-      'tumbuh': { proximityWords: {}, totalOccurrences: 0 },
-      'masalah': { proximityWords: {}, totalOccurrences: 0 },
-      'solusi': { proximityWords: {}, totalOccurrences: 0 },
-      'perbaikan': { proximityWords: {}, totalOccurrences: 0 }
-    };
+    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
+    
+    // Initialize proximity analysis results for all target keywords
+    uniqueTargetKeywords.forEach(keyword => {
+      proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
+    });
 
     catatanSurvei.forEach(catatan => {
       const words = extractKeywords(catatan.catatan);
@@ -194,7 +204,7 @@ export async function GET(request: NextRequest) {
       regionKeywords[regionName] = regionKeywords[regionName].concat(words);
       
       // Proximity analysis
-      const proximityResults = analyzeProximityWords(catatan.catatan);
+      const proximityResults = analyzeProximityWords(catatan.catatan, uniqueTargetKeywords);
       Object.keys(proximityResults).forEach(keyword => {
         if (proximityAnalysisResults[keyword]) {
           proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
@@ -280,6 +290,12 @@ export async function GET(request: NextRequest) {
         startDate: startDate || '',
         endDate: endDate || '',
         isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(startDate) || Boolean(endDate)
+      },
+      proximityKeywordsInfo: {
+        defaultKeywords,
+        customKeywords,
+        totalKeywords: uniqueTargetKeywords,
+        hasCustomKeywords: customKeywords.length > 0
       },
     });
 

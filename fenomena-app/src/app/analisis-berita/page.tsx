@@ -83,6 +83,12 @@ interface NewsTextAnalysisData {
     endDate: string;
     isFiltered: boolean;
   };
+  proximityKeywordsInfo?: {
+    defaultKeywords: string[];
+    customKeywords: string[];
+    totalKeywords: string[];
+    hasCustomKeywords: boolean;
+  };
 }
 
 export default function AnalisisBeritaPage() {
@@ -97,13 +103,14 @@ export default function AnalisisBeritaPage() {
   const [selectedKeyword, setSelectedKeyword] = useState<string>('');
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
   const [selectedEndDate, setSelectedEndDate] = useState<string>('');
+  const [customKeywords, setCustomKeywords] = useState<string>('');
   const [textAnalysisLoading, setTextAnalysisLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchTextAnalysis = async (portalBerita: string = 'all', keyword: string = '', startDate: string = '', endDate: string = '') => {
+  const fetchTextAnalysis = async (portalBerita: string = 'all', keyword: string = '', startDate: string = '', endDate: string = '', keywords: string = '') => {
     try {
       setTextAnalysisLoading(true);
       const params = new URLSearchParams();
@@ -111,6 +118,7 @@ export default function AnalisisBeritaPage() {
       if (keyword) params.append('keyword', keyword);
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
+      if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
       const url = `/api/analisis-berita/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
       const response = await fetch(url);
@@ -170,22 +178,30 @@ export default function AnalisisBeritaPage() {
 
   const handlePortalChange = (portalBerita: string) => {
     setSelectedPortal(portalBerita);
-    fetchTextAnalysis(portalBerita, selectedKeyword, selectedStartDate, selectedEndDate);
+    fetchTextAnalysis(portalBerita, selectedKeyword, selectedStartDate, selectedEndDate, customKeywords);
   };
 
   const handleKeywordChange = (keyword: string) => {
     setSelectedKeyword(keyword);
-    fetchTextAnalysis(selectedPortal, keyword, selectedStartDate, selectedEndDate);
+    fetchTextAnalysis(selectedPortal, keyword, selectedStartDate, selectedEndDate, customKeywords);
   };
 
   const handleStartDateChange = (startDate: string) => {
     setSelectedStartDate(startDate);
-    fetchTextAnalysis(selectedPortal, selectedKeyword, startDate, selectedEndDate);
+    fetchTextAnalysis(selectedPortal, selectedKeyword, startDate, selectedEndDate, customKeywords);
   };
 
   const handleEndDateChange = (endDate: string) => {
     setSelectedEndDate(endDate);
-    fetchTextAnalysis(selectedPortal, selectedKeyword, selectedStartDate, endDate);
+    fetchTextAnalysis(selectedPortal, selectedKeyword, selectedStartDate, endDate, customKeywords);
+  };
+
+  const handleCustomKeywordsChange = (keywords: string) => {
+    setCustomKeywords(keywords);
+  };
+
+  const handleApplyCustomKeywords = () => {
+    fetchTextAnalysis(selectedPortal, selectedKeyword, selectedStartDate, selectedEndDate, customKeywords);
   };
 
   const resetFilters = () => {
@@ -193,7 +209,8 @@ export default function AnalisisBeritaPage() {
     setSelectedKeyword('');
     setSelectedStartDate('');
     setSelectedEndDate('');
-    fetchTextAnalysis('all', '', '', '');
+    setCustomKeywords('');
+    fetchTextAnalysis('all', '', '', '', '');
   };
 
   if (loading) {
@@ -546,7 +563,7 @@ export default function AnalisisBeritaPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(selectedPortal !== 'all' || selectedKeyword !== '' || selectedStartDate !== '' || selectedEndDate !== '') && (
+                  {(selectedPortal !== 'all' || selectedKeyword !== '' || selectedStartDate !== '' || selectedEndDate !== '' || customKeywords !== '') && (
                     <button
                       onClick={resetFilters}
                       disabled={textAnalysisLoading}
@@ -671,9 +688,63 @@ export default function AnalisisBeritaPage() {
             {textAnalysisData.proximityAnalysis && (
               <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold mb-4">🔍 Analisis Kata Berdekatan</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Analisis kata-kata yang sering muncul di sekitar kata kunci penting dalam berita
-                </p>
+                
+                {/* Custom Keywords Input */}
+                <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                    <div className="flex-1">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        🔍 Kata Kunci Kustom untuk Analisis Berdekatan:
+                      </label>
+                      <input
+                        type="text"
+                        value={customKeywords}
+                        onChange={(e) => handleCustomKeywordsChange(e.target.value)}
+                        disabled={textAnalysisLoading}
+                        placeholder="Masukkan kata kunci dipisah koma, contoh: pemerintah, rakyat, kebijakan"
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Kata kunci akan digabung dengan kata default: peningkatan, penurunan, kenaikan, krisis, pembangunan, ekonomi, politik, sosial
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleApplyCustomKeywords}
+                      disabled={textAnalysisLoading}
+                      className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Terapkan
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-gray-600 mb-6">
+                  <p className="mb-2">
+                    Analisis kata-kata yang sering muncul di sekitar kata kunci yang dipilih:
+                  </p>
+                  {textAnalysisData.proximityKeywordsInfo && (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        <span className="font-medium">Kata Default:</span>
+                        {textAnalysisData.proximityKeywordsInfo.defaultKeywords.map((keyword: string, index: number) => (
+                          <span key={index} className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                      {textAnalysisData.proximityKeywordsInfo.hasCustomKeywords && (
+                        <div className="flex flex-wrap gap-1">
+                          <span className="font-medium">Kata Kustom:</span>
+                          {textAnalysisData.proximityKeywordsInfo.customKeywords.map((keyword: string, index: number) => (
+                            <span key={index} className="inline-flex px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {Object.entries(textAnalysisData.proximityAnalysis)
                     .filter(([_, data]) => data.occurrences > 0)
