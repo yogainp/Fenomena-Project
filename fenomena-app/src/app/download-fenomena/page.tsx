@@ -13,8 +13,9 @@ interface Category {
 
 interface Region {
   id: string;
-  name: string;
-  code: string;
+  province: string;
+  city: string;
+  regionCode: string;
 }
 
 export default function DownloadFenomenaPage() {
@@ -66,7 +67,7 @@ export default function DownloadFenomenaPage() {
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(regionsData);
+        setRegions(Array.isArray(regionsData) ? regionsData : []);
       }
     } catch (error) {
       setError('Failed to load metadata');
@@ -135,7 +136,7 @@ export default function DownloadFenomenaPage() {
         const timestamp = new Date().toISOString().split('T')[0];
         const categoryName = filters.categoryId ? categories.find(c => c.id === filters.categoryId)?.name || 'kategori' : '';
         const dateRangeName = filters.startDate && filters.endDate ? `${filters.startDate}-to-${filters.endDate}` : filters.startDate ? `from-${filters.startDate}` : filters.endDate ? `to-${filters.endDate}` : '';
-        const regionName = filters.regionId ? regions.find(r => r.id === filters.regionId)?.name || 'wilayah' : '';
+        const regionName = filters.regionId ? regions.find(r => r.id === filters.regionId)?.city || 'wilayah' : '';
         
         const parts = [categoryName, dateRangeName, regionName].filter(Boolean);
         filename = `fenomena-${parts.join('-')}-${timestamp}.${filters.format}`;
@@ -185,7 +186,7 @@ export default function DownloadFenomenaPage() {
     // Region filter
     if (filters.regionId) {
       const region = regions.find(r => r.id === filters.regionId);
-      if (region) selected.push(`Wilayah: ${region.name}`);
+      if (region) selected.push(`Wilayah: ${region.city} - ${region.province}`);
     } else {
       selected.push('Wilayah: Semua Wilayah');
     }
@@ -290,7 +291,7 @@ export default function DownloadFenomenaPage() {
                 <option value="">Semua Wilayah</option>
                 {regions.map((region) => (
                   <option key={region.id} value={region.id}>
-                    {region.name}
+                    {region.city} - {region.province}
                   </option>
                 ))}
               </select>

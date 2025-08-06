@@ -27,8 +27,17 @@ export async function GET(request: NextRequest) {
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const limit = parseInt(url.searchParams.get('limit') || '20', 10);
     const skip = (page - 1) * limit;
+    const context = url.searchParams.get('context'); // 'management' for /phenomena page
 
     const whereClause: any = {};
+
+    // For non-admin users in management context, restrict to their assigned region
+    if (user.role !== 'ADMIN' && context === 'management') {
+      if (!user.regionId) {
+        return NextResponse.json({ error: 'User not assigned to any region' }, { status: 403 });
+      }
+      whereClause.regionId = user.regionId;
+    }
 
     // Filter by category if provided
     if (categoryId) {

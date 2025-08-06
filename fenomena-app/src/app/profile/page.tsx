@@ -8,6 +8,13 @@ interface UserProfile {
   email: string;
   username: string;
   role: 'ADMIN' | 'USER';
+  regionId: string | null;
+  region?: {
+    id: string;
+    province: string;
+    city: string;
+    regionCode: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
   phenomenaCount: number;
@@ -271,6 +278,12 @@ export default function ProfilePage() {
                         {profile.role}
                       </span>
                     </div>
+                    <div>
+                      <label className="text-sm text-gray-500">Wilayah Asal</label>
+                      <p className="text-base font-medium text-gray-900">
+                        {profile.region ? `${profile.region.city} - ${profile.region.province}` : 'Tidak ada wilayah'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -331,6 +344,12 @@ export default function ProfilePage() {
                         <label className="text-sm text-gray-500">Role</label>
                         <p className="text-sm text-gray-700 mt-1">
                           {profile.role} (Role cannot be changed)
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm text-gray-500">Wilayah Asal</label>
+                        <p className="text-sm text-gray-700 mt-1">
+                          {profile.region ? `${profile.region.city} - ${profile.region.province}` : 'Tidak ada wilayah'} (Region cannot be changed)
                         </p>
                       </div>
                     </div>

@@ -30,14 +30,6 @@ interface Category {
   description: string;
 }
 
-
-interface Region {
-  id: string;
-  province: string;
-  city: string;
-  regionCode: string;
-}
-
 interface PaginationInfo {
   page: number;
   limit: number;
@@ -56,7 +48,6 @@ interface ApiResponse {
 export default function PhenomenaPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -73,7 +64,6 @@ export default function PhenomenaPage() {
     categoryId: '',
     startDate: '',
     endDate: '',
-    regionId: '',
     search: '',
   });
 
@@ -98,20 +88,11 @@ export default function PhenomenaPage() {
     try {
       setLoading(true);
       
-      const [categoriesRes, regionsRes] = await Promise.all([
-        fetch('/api/categories'),
-        fetch('/api/regions'),
-      ]);
+      const categoriesRes = await fetch('/api/categories');
       
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json();
         setCategories(categoriesData);
-      }
-      
-      
-      if (regionsRes.ok) {
-        const regionsData = await regionsRes.json();
-        setRegions(Array.isArray(regionsData) ? regionsData : []);
       }
       
       await fetchPhenomena();
@@ -129,10 +110,10 @@ export default function PhenomenaPage() {
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
-      if (filters.regionId) params.append('regionId', filters.regionId);
       if (filters.search) params.append('search', filters.search);
       params.append('page', currentPage.toString());
       params.append('limit', itemsPerPage.toString());
+      params.append('context', 'management'); // Indicate this is for management context
       
       const phenomenaRes = await fetch(`/api/phenomena?${params.toString()}`);
 
@@ -214,7 +195,7 @@ export default function PhenomenaPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-4">Filter Fenomena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -254,23 +235,7 @@ export default function PhenomenaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Wilayah
-              </label>
-              <select
-                value={filters.regionId}
-                onChange={(e) => setFilters({ ...filters, regionId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Semua Wilayah</option>
-                {regions?.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.city} - {region.province}
-                  </option>
-                )) || []}
-              </select>
-            </div>
+            {/* Region filter removed for regular users since API filters by user's region automatically */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Pencarian

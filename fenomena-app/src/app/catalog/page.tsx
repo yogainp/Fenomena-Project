@@ -115,7 +115,7 @@ export default function CatalogPage() {
 
       if (regionsRes.ok) {
         const regionsData = await regionsRes.json();
-        setRegions(Array.isArray(regionsData.regions) ? regionsData.regions : Array.isArray(regionsData) ? regionsData : []);
+        setRegions(Array.isArray(regionsData) ? regionsData : []);
       }
     } catch (error) {
       setError('Failed to load data');

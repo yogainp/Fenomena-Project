@@ -82,6 +82,11 @@ export async function PUT(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
+    // For non-admin users, check if phenomenon is in their region
+    if (user.role !== 'ADMIN' && user.regionId !== existingPhenomenon.regionId) {
+      return NextResponse.json({ error: 'Access denied - region mismatch' }, { status: 403 });
+    }
+
     // Verify category exists
     const category = await prisma.surveyCategory.findUnique({
       where: { id: validatedData.categoryId },
@@ -154,6 +159,11 @@ export async function DELETE(
     // Check if user owns this phenomenon or is admin
     if (existingPhenomenon.userId !== user.userId && user.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // For non-admin users, check if phenomenon is in their region
+    if (user.role !== 'ADMIN' && user.regionId !== existingPhenomenon.regionId) {
+      return NextResponse.json({ error: 'Access denied - region mismatch' }, { status: 403 });
     }
 
     await prisma.phenomenon.delete({

@@ -128,7 +128,7 @@ export default function AdminUsersPage() {
       
       if (response.ok) {
         const data = await response.json();
-        setRegions(data.regions || []);
+        setRegions(Array.isArray(data) ? data : []);
       } else {
         console.error('Failed to fetch regions');
       }
