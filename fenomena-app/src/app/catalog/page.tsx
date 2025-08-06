@@ -43,6 +43,14 @@ export default function CatalogPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false,
+  });
   
   // Filter state
   const [filters, setFilters] = useState({
@@ -53,9 +61,18 @@ export default function CatalogPage() {
     search: '',
   });
 
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchData();
+  }, [filters, itemsPerPage]);
+
   useEffect(() => {
     fetchData();
-  }, [filters]);
+  }, [currentPage]);
 
   const fetchData = async () => {
     try {
@@ -67,6 +84,8 @@ export default function CatalogPage() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.regionId) params.append('regionId', filters.regionId);
       if (filters.search) params.append('search', filters.search);
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
       
       const [phenomenaRes, categoriesRes, regionsRes] = await Promise.all([
         makeAuthenticatedRequest(`/api/phenomena?${params.toString()}`),
@@ -75,8 +94,14 @@ export default function CatalogPage() {
       ]);
 
       if (phenomenaRes.ok) {
-        const phenomenaData = await phenomenaRes.json();
-        setPhenomena(Array.isArray(phenomenaData) ? phenomenaData : []);
+        const phenomenaData: ApiResponse = await phenomenaRes.json();
+        if (phenomenaData.phenomena && phenomenaData.pagination) {
+          setPhenomena(phenomenaData.phenomena);
+          setPagination(phenomenaData.pagination);
+        } else {
+          // Fallback for old API response format
+          setPhenomena(Array.isArray(phenomenaData) ? phenomenaData : []);
+        }
       } else {
         console.error('Failed to fetch phenomena:', phenomenaRes.status);
         setPhenomena([]);
@@ -233,11 +258,28 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        {/* Results Summary */}
-        <div className="mb-6">
+        {/* Results Summary and Items Per Page Filter */}
+        <div className="mb-6 flex justify-between items-center">
           <p className="text-gray-600">
-            Menampilkan {phenomena.length} fenomena dalam tampilan timeline
+            Menampilkan {phenomena.length} dari {pagination.total} fenomena (Halaman {pagination.page} dari {pagination.totalPages})
           </p>
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700">
+              Tampilkan per halaman:
+            </label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
         </div>
 
         {/* Timeline View */}
@@ -307,6 +349,46 @@ export default function CatalogPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="mt-8 flex justify-center items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={!pagination.hasPrev}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Sebelumnya
+            </button>
+            
+            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+              const pageNum = Math.max(1, Math.min(pagination.totalPages - 4, currentPage - 2)) + i;
+              if (pageNum > pagination.totalPages) return null;
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-2 border rounded-md text-sm font-medium ${
+                    pageNum === currentPage
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={!pagination.hasNext}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Selanjutnya →
+            </button>
           </div>
         )}
       </div>

@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     const count = url.searchParams.get('count') === 'true';
     const download = url.searchParams.get('download') === 'true';
     const format = url.searchParams.get('format') || 'json';
+    const page = parseInt(url.searchParams.get('page') || '1', 10);
+    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+    const skip = (page - 1) * limit;
 
     const whereClause: any = {};
 
@@ -81,6 +84,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ count: total });
     }
 
+    // Get total count for pagination
+    const total = await prisma.phenomenon.count({
+      where: whereClause,
+    });
+
     const phenomena = await prisma.phenomenon.findMany({
       where: whereClause,
       include: {
@@ -108,7 +116,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
-      take: download ? 10000 : undefined, // Limit download to 10k records
+      take: download ? 10000 : limit,
+      skip: download ? 0 : skip,
     });
 
     // Handle download formats
@@ -207,7 +216,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(phenomena);
+    // Return paginated response
+    const totalPages = Math.ceil(total / limit);
+    return NextResponse.json({
+      phenomena,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    });
   } catch (error: any) {
     if (error.message.includes('required')) {
       return NextResponse.json({ error: error.message }, { status: 403 });

@@ -229,6 +229,16 @@ export default function KatalogBeritaPage() {
     });
   };
 
+  const getPortalDisplayName = (portalDomain: string): string => {
+    const portalMap: { [key: string]: string } = {
+      'pontianakpost.jawapos.com': 'Pontianak Post',
+      'kalbaronline.com': 'Kalbar Online',
+      'kalbar.antaranews.com': 'Antara News Kalbar',
+      'suarakalbar.co.id': 'Suara Kalbar'
+    };
+    return portalMap[portalDomain] || portalDomain;
+  };
+
   if (loading && beritaList.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -329,13 +339,17 @@ export default function KatalogBeritaPage() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
-                <input
-                  type="text"
-                  placeholder="Filter by portal..."
+                <select
                   value={portalFilter}
                   onChange={(e) => setPortalFilter(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Portals</option>
+                  <option value="pontianakpost.jawapos.com">Pontianak Post</option>
+                  <option value="kalbaronline.com">Kalbar Online</option>
+                  <option value="kalbar.antaranews.com">Antara News Kalbar</option>
+                  <option value="suarakalbar.co.id">Suara Kalbar</option>
+                </select>
               </div>
               
               <div>
@@ -462,7 +476,7 @@ export default function KatalogBeritaPage() {
                         
                         <div className="flex items-center flex-wrap gap-2 text-sm mb-3">
                           <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                            {berita.portalBerita}
+                            {getPortalDisplayName(berita.portalBerita)}
                           </span>
                           <span className="text-gray-500">
                             Published: {formatDate(berita.tanggalBerita)}

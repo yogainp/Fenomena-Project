@@ -2498,6 +2498,15 @@ async function scrapeSuaraKalbar(
       }
 
       // Check if we should continue to next page - Suara Kalbar pagination
+      console.log(`[SUARA KALBAR] === STARTING PAGINATION CHECK ===`);
+      console.log(`[SUARA KALBAR] Current page: ${currentPage}, Max pages: ${maxPages}`);
+      
+      // Simple check first: if we haven't reached maxPages, try to continue
+      if (currentPage >= maxPages) {
+        console.log(`[SUARA KALBAR] ❌ Reached maxPages limit: ${currentPage}/${maxPages}`);
+        break;
+      }
+      
       const hasNextPage = await page.evaluate((currentPage) => {
         console.log(`[SUARA KALBAR] === PAGINATION DEBUG FOR PAGE ${currentPage} ===`);
         
@@ -2557,46 +2566,58 @@ async function scrapeSuaraKalbar(
           });
         }
         
-        // Multiple approaches to find next page link
+        // Simplified approach: just look for any next page link
+        console.log(`[SUARA KALBAR] 🔍 Looking for next page links...`);
         
-        // Approach 1: Look for "Selanjutnya" text
-        const nextPageLink1 = Array.from(allLinks).find(link => {
+        // Method 1: Look for "Selanjutnya" text
+        let foundNextPage = false;
+        let nextPageUrl = '';
+        
+        for (const link of allLinks) {
           const text = link.textContent?.trim().toLowerCase() || '';
           const href = link.getAttribute('href') || '';
           
-          return text.includes('selanjutnya') && href.includes('/page/');
-        });
+          // Debug each link that might be relevant
+          if (text.includes('selanjutnya') || href.includes('/page/')) {
+            console.log(`[SUARA KALBAR] 🔍 Checking link: "${text}" -> ${href}`);
+          }
+          
+          // Check for "Selanjutnya" text
+          if (text.includes('selanjutnya') && href.includes('/page/')) {
+            console.log(`[SUARA KALBAR] ✅ FOUND "Selanjutnya" link: ${href}`);
+            foundNextPage = true;
+            nextPageUrl = href;
+            break;
+          }
+          
+          // Check for next page URL pattern
+          if (href.includes(`/page/${currentPage + 1}/`)) {
+            console.log(`[SUARA KALBAR] ✅ FOUND next page URL: ${href}`);
+            foundNextPage = true;
+            nextPageUrl = href;
+            break;
+          }
+        }
         
-        // Approach 2: Look for next page URL pattern
-        const nextPageLink2 = Array.from(allLinks).find(link => {
-          const href = link.getAttribute('href') || '';
-          return href.includes(`/page/${currentPage + 1}/`);
-        });
-        
-        // Approach 3: Simple fallback - if we're on page 1, look for /page/2/
-        const nextPageLink3 = currentPage === 1 ? 
-          Array.from(allLinks).find(link => {
-            const href = link.getAttribute('href') || '';
-            return href.includes('/page/2/');
-          }) : null;
-        
-        const finalNextPageLink = nextPageLink1 || nextPageLink2 || nextPageLink3;
-        
-        if (finalNextPageLink) {
-          const href = finalNextPageLink.getAttribute('href') || '';
-          console.log(`[SUARA KALBAR] ✅ NEXT PAGE CONFIRMED: ${href}`);
+        if (foundNextPage) {
+          console.log(`[SUARA KALBAR] ✅ NEXT PAGE CONFIRMED: ${nextPageUrl}`);
           return true;
         }
         
-        // Last resort: assume there are more pages if we haven't reached the limit
-        // This is a fallback for when pagination doesn't load properly
-        if (currentPage < 3) { // Only for first few pages
-          console.log(`[SUARA KALBAR] 🔄 FALLBACK: Assuming more pages exist (page ${currentPage})`);
-          
-          // Check if URL pattern would work for next page
-          const expectedNextUrl = `https://www.suarakalbar.co.id/category/kalbar/page/${currentPage + 1}/`;
-          console.log(`[SUARA KALBAR] 🔄 Will try: ${expectedNextUrl}`);
+        // Last resort: simple fallback based on articles found
+        console.log(`[SUARA KALBAR] 🤔 No pagination detected, checking fallback conditions...`);
+        
+        // Get article count on current page for intelligent fallback
+        const currentPageArticles = document.querySelectorAll('.ray-main-post-title a, article a, h2 a, h3 a').length;
+        console.log(`[SUARA KALBAR] Articles found on page ${currentPage}: ${currentPageArticles}`);
+        
+        // Simple fallback: if we found articles, assume more pages exist
+        // (maxPages limit is already checked outside this function)
+        if (currentPageArticles >= 5) {
+          console.log(`[SUARA KALBAR] 🔄 SIMPLE FALLBACK: Found ${currentPageArticles} articles, assuming more pages exist`);
           return true;
+        } else {
+          console.log(`[SUARA KALBAR] 🛑 FALLBACK DECLINED: Only ${currentPageArticles} articles found`);
         }
         
         console.log(`[SUARA KALBAR] ❌ NO NEXT PAGE FOUND - STOPPING`);
