@@ -391,25 +391,148 @@ async function scrapePontianakPost(
         continue;
       }
 
-      // Extract article links and titles
+      // Extract article links and titles - specifically from "berita terkini" section
       const articles = await page.evaluate(() => {
-        let articleElements = document.querySelectorAll('article, .post, .news-item, .card, .entry, div[class*="post"], div[class*="article"], div[class*="news"], div[class*="item"]');
+        let articleElements: NodeListOf<Element> | null = null;
         
-        // If no specific containers found, try to find any links that look like articles
-        if (articleElements.length === 0) {
+        // Priority 1: SPECIFIC selector for Pontianakpost structure
+        const latestNewsSections = [
+          // EXACT structure for Pontianakpost - h2.latest__title contains title and link
+          '.latest.m3.clearfix h2.latest__title',
+          '.latest.m3 h2.latest__title', // Alternative without clearfix
+          
+          // Fallback selectors for pontianakpost structure variations
+          '.latest h2.latest__title',
+          'h2.latest__title', // Direct selector if section class changes
+          
+          // Additional fallback for latest section structure
+          '.latest.m3.clearfix h2',
+          '.latest.m3 h2',
+          '.latest h2',
+        ];
+        
+        for (const selector of latestNewsSections) {
+          const elements = document.querySelectorAll(selector);
+          if (elements.length > 0) {
+            articleElements = elements;
+            console.log(`✅ [PONTIANAKPOST] Found ${elements.length} articles in LATEST NEWS section using selector: "${selector}"`);
+            
+            // Special debug for the exact class user mentioned
+            if (selector.includes('.latest.m3.clearfix')) {
+              console.log(`🎯 SUCCESS: Using the exact pontianakpost "latest m3 clearfix" section!`);
+              // Debug: log the section content
+              const sectionElement = document.querySelector('.latest.m3.clearfix');
+              if (sectionElement) {
+                console.log(`Section HTML preview: ${sectionElement.innerHTML.substring(0, 200)}...`);
+              }
+            }
+            break;
+          }
+        }
+        
+        // Priority 2: If no specific latest news section found, exclude popular sections
+        if (!articleElements || articleElements.length === 0) {
+          console.log('❌ [PONTIANAKPOST] No specific latest news section found, trying to exclude popular sections...');
+          
+          // Special debug: check if the exact section exists but has no articles
+          const latestSection = document.querySelector('.latest.m3.clearfix');
+          if (latestSection) {
+            console.log('🔍 [PONTIANAKPOST] Found .latest.m3.clearfix section but no articles inside!');
+            console.log(`Section HTML: ${latestSection.innerHTML.substring(0, 300)}...`);
+            console.log(`Section children count: ${latestSection.children.length}`);
+            
+            // Try to find any links or content in the section
+            const linksInSection = latestSection.querySelectorAll('a[href*="/"]');
+            console.log(`Links found in section: ${linksInSection.length}`);
+            if (linksInSection.length > 0) {
+              console.log('Sample links:');
+              Array.from(linksInSection).slice(0, 3).forEach((link, index) => {
+                console.log(`  ${index + 1}. ${link.textContent?.trim()} -> ${link.getAttribute('href')}`);
+              });
+            }
+          } else {
+            console.log('❌ [PONTIANAKPOST] .latest.m3.clearfix section NOT FOUND on page!');
+            // Debug: show what sections are available
+            const availableSections = document.querySelectorAll('[class*="latest"], [class*="recent"], [class*="terkini"]');
+            console.log(`Available sections with "latest/recent/terkini": ${availableSections.length}`);
+            Array.from(availableSections).forEach((section, index) => {
+              console.log(`  ${index + 1}. ${section.tagName}.${section.className}`);
+            });
+          }
+          
+          const excludePopularSelectors = [
+            // Get all articles but exclude those in popular/terpopuler sections
+            'article:not(.popular):not(.terpopuler):not([class*="popular"]):not([class*="terpopuler"])',
+            '.post:not(.popular):not(.terpopuler):not([class*="popular"]):not([class*="terpopuler"])',
+            '.news-item:not(.popular):not(.terpopuler):not([class*="popular"]):not([class*="terpopuler"])',
+            '.card:not(.popular):not(.terpopuler):not([class*="popular"]):not([class*="terpopuler"])',
+            '.entry:not(.popular):not(.terpopuler):not([class*="popular"]):not([class*="terpopuler"])',
+            'div[class*="post"]:not([class*="popular"]):not([class*="terpopuler"])',
+            'div[class*="article"]:not([class*="popular"]):not([class*="terpopuler"])',
+            'div[class*="news"]:not([class*="popular"]):not([class*="terpopuler"])',
+            'div[class*="item"]:not([class*="popular"]):not([class*="terpopuler"])',
+          ];
+          
+          for (const selector of excludePopularSelectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              articleElements = elements;
+              console.log(`Found ${elements.length} articles excluding popular sections using selector: ${selector}`);
+              break;
+            }
+          }
+        }
+        
+        // Priority 3: Fallback to main content area (exclude sidebar and widgets)
+        if (!articleElements || articleElements.length === 0) {
+          console.log('Using fallback to main content area...');
+          
+          const mainContentSelectors = [
+            'main article, main .post, main .news-item, main .card, main .entry',
+            '.main-content article, .main-content .post, .main-content .news-item',
+            '.content-main article, .content-main .post, .content-main .news-item',
+            '#main article, #main .post, #main .news-item',
+            '#content article, #content .post, #content .news-item',
+          ];
+          
+          for (const selector of mainContentSelectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              articleElements = elements;
+              console.log(`Found ${elements.length} articles in main content using selector: ${selector}`);
+              break;
+            }
+          }
+        }
+        
+        // Priority 4: Last resort - generic selectors but with additional filtering
+        if (!articleElements || articleElements.length === 0) {
+          console.log('Using last resort generic selectors...');
+          articleElements = document.querySelectorAll('article, .post, .news-item, .card, .entry, div[class*="post"], div[class*="article"], div[class*="news"], div[class*="item"]');
+        }
+        
+        // If still no specific containers found, try to find any links that look like articles
+        if (!articleElements || articleElements.length === 0) {
+          console.log('No containers found, trying direct link approach...');
           // Try different approaches to find article links
           const linkSelectors = [
-            'a[href*="/"][href*="20"]', // Links with year in them (likely news)
-            'a[href*="/"][title]', // Links with title attribute
-            'a[href*="/artikel"]', // Links with "artikel" in URL
-            'a[href*="/berita"]', // Links with "berita" in URL
-            'a[href*="/news"]' // Links with "news" in URL
+            'a[href*="/"][href*="20"]:not(.popular a):not(.terpopuler a)', // Links with year, exclude popular
+            'a[href*="/"][title]:not(.popular a):not(.terpopuler a)', // Links with title attribute, exclude popular
+            'a[href*="/artikel"]:not(.popular a):not(.terpopuler a)', // Links with "artikel" in URL, exclude popular
+            'a[href*="/berita"]:not(.popular a):not(.terpopuler a)', // Links with "berita" in URL, exclude popular
+            'a[href*="/news"]:not(.popular a):not(.terpopuler a)', // Links with "news" in URL, exclude popular
+            'a[href*="/"][href*="20"]', // Fallback: Links with year in them (likely news)
+            'a[href*="/"][title]', // Fallback: Links with title attribute
+            'a[href*="/artikel"]', // Fallback: Links with "artikel" in URL
+            'a[href*="/berita"]', // Fallback: Links with "berita" in URL
+            'a[href*="/news"]' // Fallback: Links with "news" in URL
           ];
           
           for (const selector of linkSelectors) {
-            articleElements = document.querySelectorAll(selector);
-            if (articleElements.length > 0) {
-              console.log(`Found ${articleElements.length} articles using selector: ${selector}`);
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              articleElements = elements;
+              console.log(`Found ${elements.length} articles using link selector: ${selector}`);
               break;
             }
           }
@@ -418,39 +541,126 @@ async function scrapePontianakPost(
         const articles = [];
 
         for (const element of articleElements) {
-          let titleElement, linkElement;
+          let title = '';
+          let href = '';
+          let dateString = '';
           
-          if (element.tagName === 'A') {
-            // If element is already a link
-            titleElement = element;
-            linkElement = element;
-          } else {
-            // If element is a container
-            titleElement = element.querySelector('h1, h2, h3, h4, .title, .headline, a[href*="/"]');
-            linkElement = element.querySelector('a[href*="/"]') || titleElement;
+          if (element.tagName === 'H2' && element.classList.contains('latest__title')) {
+            // PONTIANAKPOST SPECIFIC: h2.latest__title structure
+            const linkElement = element.querySelector('a[href*="/"]');
+            if (linkElement) {
+              title = linkElement.textContent?.trim() || '';
+              href = linkElement.getAttribute('href') || '';
+              
+              // Find associated date - look for sibling or nearby .latest__date
+              const parentElement = element.parentElement;
+              let dateElement = null;
+              
+              if (parentElement) {
+                // Try to find date in same parent container
+                dateElement = parentElement.querySelector('.latest__date, span.latest__date');
+                
+                // If not found, try in next sibling elements
+                if (!dateElement) {
+                  let nextSibling = element.nextElementSibling;
+                  while (nextSibling && !dateElement) {
+                    if (nextSibling.classList.contains('latest__date') || 
+                        nextSibling.querySelector('.latest__date')) {
+                      dateElement = nextSibling.classList.contains('latest__date') ? 
+                                  nextSibling : nextSibling.querySelector('.latest__date');
+                      break;
+                    }
+                    nextSibling = nextSibling.nextElementSibling;
+                  }
+                }
+              }
+              
+              if (dateElement) {
+                dateString = dateElement.textContent?.trim() || '';
+              }
+              
+              console.log(`🎯 [PONTIANAKPOST] Found h2.latest__title: "${title.substring(0, 50)}..." | Date: "${dateString}"`);
+            }
+          } else if (element.tagName === 'H2') {
+            // Fallback for h2 without latest__title class
+            const linkElement = element.querySelector('a[href*="/"]');
+            if (linkElement) {
+              title = linkElement.textContent?.trim() || '';
+              href = linkElement.getAttribute('href') || '';
+              console.log(`⚠️ [PONTIANAKPOST] Found h2 (not latest__title): "${title.substring(0, 50)}..."`);
+            }
           }
           
-          if (titleElement && linkElement) {
-            const title = titleElement.textContent?.trim();
-            const href = linkElement.getAttribute('href');
+          if (title && href && title.length > 5) {
+            const fullLink = href.startsWith('http') ? href : 'https://pontianakpost.jawapos.com' + href;
+            articles.push({
+              title,
+              link: fullLink,
+              dateString // Include date for later processing
+            });
             
-            if (title && href && title.length > 10) { // Filter out very short titles
-              articles.push({
-                title,
-                link: href.startsWith('http') ? href : 'https://pontianakpost.jawapos.com' + href,
-              });
+            // Debug for articles from the exact section
+            const isFromExactSection = element.closest('.latest.m3.clearfix') !== null;
+            if (isFromExactSection) {
+              console.log(`✅ Article from EXACT .latest.m3.clearfix section: "${title.substring(0, 50)}..."`);
             }
           }
         }
 
-        return articles;
+        // Additional filtering: exclude articles that are clearly from popular/terpopuler sections based on content
+        const filteredArticles = articles.filter(article => {
+          const titleLower = article.title.toLowerCase();
+          const linkLower = article.link.toLowerCase();
+          
+          // Skip articles that contain popular/trending indicators in title or URL
+          const popularIndicators = ['terpopuler', 'popular', 'trending', 'viral', 'paling dibaca', 'most read'];
+          const hasPopularIndicator = popularIndicators.some(indicator => 
+            titleLower.includes(indicator) || linkLower.includes(indicator)
+          );
+          
+          if (hasPopularIndicator) {
+            console.log(`Excluding popular article: ${article.title.substring(0, 30)}...`);
+            return false;
+          }
+          
+          return true;
+        });
+        
+        console.log(`Original articles: ${articles.length}, After filtering popular: ${filteredArticles.length}`);
+        return filteredArticles;
       });
 
-      console.log(`Found ${articles.length} articles on page ${currentPage}`);
+      console.log(`✓ [PONTIANAKPOST] Found ${articles.length} articles on page ${currentPage}`);
       
-      // Debug: Log first few articles found
+      // Enhanced debug: Validate 20 articles per page expectation
       if (articles.length > 0) {
-        console.log('Sample articles found:', articles.slice(0, 3).map(a => ({ title: a.title.substring(0, 50) + '...', link: a.link })));
+        console.log('=== PONTIANAKPOST SCRAPING DEBUG ===');
+        console.log(`Page URL: ${pageUrl}`);
+        console.log(`Expected: 20 articles per page | Actual: ${articles.length} articles`);
+        
+        if (articles.length !== 20) {
+          console.log(`⚠️ [PONTIANAKPOST] WARNING: Expected 20 articles, got ${articles.length}!`);
+          if (articles.length < 20) {
+            console.log('   This might indicate: incomplete page load, different page structure, or fewer articles available');
+          } else {
+            console.log('   This might indicate: selector capturing extra elements beyond the latest section');
+          }
+        } else {
+          console.log('✅ [PONTIANAKPOST] Perfect! Got exactly 20 articles as expected');
+        }
+        
+        console.log('Sample articles found:');
+        articles.slice(0, 5).forEach((article, index) => {
+          console.log(`  ${index + 1}. Title: "${article.title.substring(0, 60)}${article.title.length > 60 ? '...' : ''}"`);
+          console.log(`     Link: ${article.link}`);
+          console.log(`     Date: "${article.dateString || 'No date found'}"`);
+        });
+        
+        // Count articles with dates
+        const articlesWithDates = articles.filter(a => a.dateString && a.dateString.trim()).length;
+        console.log(`📅 Articles with dates: ${articlesWithDates}/${articles.length}`);
+        
+        console.log('=== END DEBUG ===');
       } else {
         // Debug: Check page content
         const pageInfo = await page.evaluate(() => {
@@ -481,9 +691,15 @@ async function scrapePontianakPost(
       
       // Enhanced logging for pagination continuation
       if (relevantArticles.length === 0) {
-        console.log(`No relevant articles found on page ${currentPage}, but continuing to next page...`);
+        console.log(`⚠ No relevant articles (matching keywords) found on PontianakPost page ${currentPage}, but continuing to next page...`);
+        console.log(`Total articles found: ${articles.length}, Keywords: [${keywords.join(', ')}]`);
       } else {
-        console.log(`Processing ${relevantArticles.length} relevant articles from page ${currentPage}...`);
+        console.log(`✓ Processing ${relevantArticles.length} relevant articles from PontianakPost page ${currentPage}...`);
+        console.log(`Relevant articles (first 3):`);
+        relevantArticles.slice(0, 3).forEach((article, index) => {
+          const matchedKws = keywords.filter(kw => article.title.toLowerCase().includes(kw));
+          console.log(`  ${index + 1}. "${article.title.substring(0, 50)}..." [Keywords: ${matchedKws.join(', ')}]`);
+        });
       }
 
       // Scrape content from relevant articles
@@ -793,22 +1009,53 @@ async function scrapePontianakPost(
             };
           }, { articleTitle: article.title, articleLink: article.link });
 
-          // Parse date using enhanced Indonesian date parser
+          // Parse date - prefer date from list page (latest__date), fallback to article page
           let articleDate: Date;
-          if (articleData.dateString) {
-            console.log(`\n🔍 Processing article: "${articleData.title.substring(0, 60)}..."`);
-            console.log(`📅 Raw date string found: "${articleData.dateString}"`);
+          let dateSource = '';
+          
+          // Priority 1: Use date from list page (latest__date)
+          if (article.dateString && article.dateString.trim()) {
+            console.log(`\n🔍 [PONTIANAKPOST] Processing article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Using date from list page (.latest__date): "${article.dateString}"`);
+            console.log(`🔗 Article URL: ${articleData.link}`);
+            articleDate = parseIndonesianDate(article.dateString);
+            dateSource = 'list_page (.latest__date)';
+          }
+          // Priority 2: Use date from article page if list page date not available
+          else if (articleData.dateString) {
+            console.log(`\n🔍 [PONTIANAKPOST] Processing article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Using date from article page: "${articleData.dateString}"`);
+            console.log(`🔗 Article URL: ${articleData.link}`);
             articleDate = parseIndonesianDate(articleData.dateString);
+            dateSource = 'article_page';
+          }
+          // Fallback: Current date
+          else {
+            articleDate = new Date();
+            console.log(`\n❌ [PONTIANAKPOST] NO DATE FOUND for "${articleData.title.substring(0, 60)}..."`);
+            console.log(`🔗 Article URL: ${articleData.link}`);
+            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
+            dateSource = 'fallback (current date)';
+          }
+          
+          // Validate parsed date
+          if (dateSource !== 'fallback (current date)') {
             const wasCurrentDate = Math.abs(articleDate.getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000; // Within 24 hours
             if (wasCurrentDate) {
               console.log(`⚠️  WARNING: Date parsing may have failed - using current date (${articleDate.toISOString().split('T')[0]})`);
+              console.log(`   Date source: ${dateSource}`);
             } else {
               console.log(`✅ Successfully parsed date: ${articleDate.toISOString().split('T')[0]} (${articleDate.toLocaleDateString('id-ID')})`);
+              console.log(`   Date source: ${dateSource}`);
+              
+              // Additional validation: check if article is recent (not older than 30 days)
+              const daysDiff = Math.floor((new Date().getTime() - articleDate.getTime()) / (1000 * 60 * 60 * 24));
+              if (daysDiff > 30) {
+                console.log(`⚠️  NOTE: Article is ${daysDiff} days old - might be from popular section instead of latest news`);
+              } else {
+                console.log(`✅ Article age: ${daysDiff} days (recent)`);
+              }
             }
-          } else {
-            articleDate = new Date();
-            console.log(`\n❌ NO DATE FOUND for "${articleData.title.substring(0, 60)}..."`);
-            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
           }
 
           // Find matched keywords
@@ -828,7 +1075,7 @@ async function scrapePontianakPost(
             
             if (isDuplicate) {
               result.duplicates++;
-              console.log(`⚠ Skipping duplicate: ${articleData.title.substring(0, 50)}...`);
+              console.log(`⚠ [PONTIANAKPOST] Skipping duplicate: ${articleData.title.substring(0, 50)}...`);
               continue;
             }
             
@@ -870,7 +1117,9 @@ async function scrapePontianakPost(
 
               result.newItems++;
               result.scrapedItems.push(scrapedItem);
-              console.log(`✓ Saved: ${scrapedItem.title.substring(0, 50)}...`);
+              console.log(`✓ [PONTIANAKPOST] SAVED: ${scrapedItem.title.substring(0, 50)}...`);
+              console.log(`  📅 Date: ${scrapedItem.date.toISOString().split('T')[0]}`);
+              console.log(`  🏷️  Keywords: [${scrapedItem.matchedKeywords.join(', ')}]`);
 
             } catch (dbError: unknown) {
               if ((dbError as { code?: string }).code === 'P2002') {
@@ -893,27 +1142,84 @@ async function scrapePontianakPost(
         }
       }
 
-      // Check if we should continue to next page
-      const hasNextPage = await page.evaluate(() => {
-        const nextButton = document.querySelector('a[href*="page"]:last-child, .next, .pagination .next');
-        return nextButton && !nextButton.classList.contains('disabled');
-      });
+      // Check if we should continue to next page - PONTIANAKPOST SPECIFIC
+      const hasNextPage = await page.evaluate((currentPageNum) => {
+        // Look for paging items specifically for pontianakpost
+        const pagingItems = document.querySelectorAll('div.paging__item a, .paging__item a');
+        
+        if (pagingItems.length === 0) {
+          console.log('❌ [PONTIANAKPOST] No paging items found (.paging__item)');
+          // Fallback to generic pagination selectors
+          const genericNext = document.querySelector('a[href*="page"]:last-child, .next, .pagination .next, a[href*="' + (currentPageNum + 1) + '"]');
+          return genericNext && !genericNext.classList.contains('disabled');
+        }
+        
+        // Check if there's a link to the next page number
+        const nextPageNum = currentPageNum + 1;
+        let hasNext = false;
+        
+        pagingItems.forEach((item) => {
+          const href = item.getAttribute('href') || '';
+          const text = item.textContent?.trim() || '';
+          
+          // Check if this link goes to the next page
+          if (href.includes('page=' + nextPageNum) || 
+              href.includes('/' + nextPageNum) ||
+              text === nextPageNum.toString() ||
+              (text.toLowerCase().includes('next') && !item.classList.contains('disabled'))) {
+            hasNext = true;
+            console.log(`✅ [PONTIANAKPOST] Found next page link: ${href} (text: "${text}")`);
+          }
+        });
+        
+        if (!hasNext) {
+          console.log(`❌ [PONTIANAKPOST] No next page found for page ${nextPageNum}`);
+          console.log('Available paging links:');
+          pagingItems.forEach((item, index) => {
+            console.log(`  ${index + 1}. "${item.textContent?.trim()}" -> ${item.getAttribute('href')}`);
+          });
+        }
+        
+        return hasNext;
+      }, currentPage);
 
       if (!hasNextPage) {
         console.log('No more pages found, stopping pagination');
         break;
       }
 
+      // Summary for this page
+      console.log(`\n=== PONTIANAKPOST PAGE ${currentPage} SUMMARY ===`);
+      console.log(`Total articles found: ${articles.length} (Expected: 20)`);
+      console.log(`Relevant articles (with keywords): ${relevantArticles.length}`);
+      console.log(`Articles processed in this page: ${relevantArticles.length}`);
+      console.log(`Articles with dates: ${articles.filter(a => a.dateString && a.dateString.trim()).length}/${articles.length}`);
+      console.log(`Running total - New items: ${result.newItems}, Duplicates: ${result.duplicates}`);
+      
+      // Additional pontianakpost-specific validations
+      const h2LatestTitleCount = articles.filter(a => a.title && a.link).length;
+      console.log(`h2.latest__title articles captured: ${h2LatestTitleCount}/${articles.length}`);
+      
+      console.log(`=== END PAGE SUMMARY ===\n`);
+
       currentPage++;
       await new Promise(resolve => setTimeout(resolve, delayMs)); // Rate limiting between pages
 
     } catch (pageError: unknown) {
       const errorMessage = pageError instanceof Error ? pageError.message : 'Unknown page error';
-      console.error(`Error scraping page ${currentPage}:`, errorMessage);
+      console.error(`❌ Error scraping PontianakPost page ${currentPage}:`, errorMessage);
       result.errors.push(`Page ${currentPage} error: ${errorMessage}`);
       break; // Stop pagination on page error
     }
   }
+  
+  // Final summary for PontianakPost scraping
+  console.log(`\n🎯 === PONTIANAKPOST SCRAPING COMPLETE ===`);
+  console.log(`📄 Pages scraped: ${currentPage - 1}`);
+  console.log(`📰 New articles saved: ${result.newItems}`);
+  console.log(`🔄 Duplicates skipped: ${result.duplicates}`);
+  console.log(`❌ Errors encountered: ${result.errors.length}`);
+  console.log(`=== END PONTIANAKPOST SCRAPING ===\n`);
 }
 
 async function scrapeKalbarOnline(
