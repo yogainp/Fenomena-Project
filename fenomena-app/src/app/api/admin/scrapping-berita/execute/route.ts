@@ -8,7 +8,8 @@ import { z } from 'zod';
 const ALLOWED_PORTALS = [
   'https://pontianakpost.jawapos.com/daerah',
   'https://kalbaronline.com/berita-daerah/',
-  'https://kalbar.antaranews.com/kalbar'
+  'https://kalbar.antaranews.com/kalbar',
+  'https://www.suarakalbar.co.id/category/kalbar/'
 ];
 
 const executeScrapingSchema = z.object({

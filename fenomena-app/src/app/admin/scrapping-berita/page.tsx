@@ -59,6 +59,11 @@ export default function ScrappingBeritaPage() {
       name: 'Antara News Kalbar',
       url: 'https://kalbar.antaranews.com/kalbar',
       description: 'Portal berita Antara News Kalimantan Barat'
+    },
+    {
+      name: 'Suara Kalbar',
+      url: 'https://www.suarakalbar.co.id/category/kalbar/',
+      description: 'Portal berita daerah Suara Kalbar'
     }
   ];
 

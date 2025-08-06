@@ -122,8 +122,10 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
       await scrapeKalbarOnline(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
     } else if (portalUrl.includes('kalbar.antaranews.com')) {
       await scrapeAntaraNews(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
+    } else if (portalUrl.includes('suarakalbar.co.id')) {
+      await scrapeSuaraKalbar(page, portalUrl, maxPages, delayMs, keywordList, result, processedUrls, processedTitles);
     } else {
-      throw new Error('Unsupported portal. Currently only supports pontianakpost.jawapos.com, kalbaronline.com, and kalbar.antaranews.com');
+      throw new Error('Unsupported portal. Currently only supports pontianakpost.jawapos.com, kalbaronline.com, kalbar.antaranews.com, and suarakalbar.co.id');
     }
 
     result.success = true;
@@ -2088,4 +2090,549 @@ async function scrapeAntaraNews(
       break; // Stop pagination on page error
     }
   }
+}
+
+async function scrapeSuaraKalbar(
+  page: Page, 
+  baseUrl: string, 
+  maxPages: number, 
+  delayMs: number,
+  keywords: string[],
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>
+): Promise<void> {
+  let currentPage = 1;
+
+  while (currentPage <= maxPages) {
+    try {
+      const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}page/${currentPage}/`;
+      console.log(`Scraping Suara Kalbar page ${currentPage}: ${pageUrl}`);
+
+      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      
+      // Wait for page content to load - extended for Suara Kalbar
+      await page.waitForLoadState('domcontentloaded');
+      await page.waitForLoadState('networkidle');
+      
+      // Wait longer for dynamic content
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      
+      // Try multiple approaches to wait for pagination
+      let paginationLoaded = false;
+      const paginationSelectors = [
+        '.ray-posts-pagination',
+        'section[class*="pagination"]',
+        'a[href*="/page/"]',
+        '*:contains("Selanjutnya")',
+        'section'
+      ];
+      
+      for (const selector of paginationSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          console.log(`[SUARA KALBAR] ✅ Found element with selector: ${selector}`);
+          paginationLoaded = true;
+          break;
+        } catch (e) {
+          console.log(`[SUARA KALBAR] ⚠️ Selector "${selector}" not found, trying next...`);
+        }
+      }
+      
+      if (!paginationLoaded) {
+        console.log(`[SUARA KALBAR] ⚠️ No specific pagination elements found, but continuing...`);
+      }
+      
+      // Additional wait for any remaining JavaScript
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Extract article links and titles for Suara Kalbar
+      const articles = await page.evaluate(() => {
+        const articles = [];
+        
+        // Try Suara Kalbar specific selectors first
+        const selectors = [
+          // Main WordPress article containers
+          '.ray-main-post-title a',
+          'article h2 a',
+          'article h3 a',
+          '.entry-title a',
+          '.post-title a',
+          // Fallback generic selectors
+          'article a[href*="/202"]', // Links with year in URL
+          'h2 a[href*="/"]',
+          'h3 a[href*="/"]',
+          'a[href*="/category/kalbar/"]'
+        ];
+        
+        let articleElements: NodeListOf<Element> | null = null;
+        
+        for (const selector of selectors) {
+          const elements = document.querySelectorAll(selector);
+          if (elements.length > 0) {
+            console.log(`[SUARA KALBAR] Found ${elements.length} articles using selector: ${selector}`);
+            
+            elements.forEach(element => {
+              const title = element.textContent?.trim() || element.getAttribute('title')?.trim();
+              const href = element.getAttribute('href');
+              
+              if (title && href && title.length > 10) {
+                // Ensure full URL
+                const fullUrl = href.startsWith('http') ? href : 
+                               href.startsWith('/') ? 'https://www.suarakalbar.co.id' + href : 
+                               'https://www.suarakalbar.co.id/' + href;
+                
+                // Only include articles from the kalbar category or recent articles
+                if (fullUrl.includes('/category/kalbar/') || 
+                    fullUrl.match(/\/202[0-9]\/\d{2}\//)) {
+                  articles.push({
+                    title,
+                    link: fullUrl,
+                  });
+                }
+              }
+            });
+            
+            if (articles.length > 0) {
+              break; // Found articles with this selector
+            }
+          }
+        }
+        
+        // Remove duplicates by URL
+        const uniqueArticles = articles.filter((article, index, self) => 
+          index === self.findIndex(a => a.link === article.link)
+        );
+        
+        console.log(`[SUARA KALBAR] Total unique articles found: ${uniqueArticles.length}`);
+        return uniqueArticles;
+      });
+
+      console.log(`Found ${articles.length} articles on Suara Kalbar page ${currentPage}`);
+      
+      // Filter articles by keywords in title
+      const relevantArticles = articles.filter(article => 
+        keywords.some(keyword => 
+          article.title.toLowerCase().includes(keyword)
+        )
+      );
+
+      console.log(`Found ${relevantArticles.length} relevant articles (containing keywords)`);
+      
+      // If no articles found at all, might be end of content
+      if (articles.length === 0) {
+        console.log(`No articles found on page ${currentPage}, stopping pagination`);
+        break;
+      }
+      
+      // Log relevant articles for debugging
+      if (relevantArticles.length === 0) {
+        console.log(`No relevant articles found on Suara Kalbar page ${currentPage}, but continuing to next page...`);
+        console.log(`Total articles found: ${articles.length}, Keywords: [${keywords.join(', ')}]`);
+      } else {
+        console.log(`Processing ${relevantArticles.length} relevant articles from Suara Kalbar page ${currentPage}...`);
+        console.log(`Relevant articles (first 3):`);
+        relevantArticles.slice(0, 3).forEach((article, index) => {
+          const matchedKws = keywords.filter(kw => article.title.toLowerCase().includes(kw));
+          console.log(`  ${index + 1}. "${article.title.substring(0, 50)}..." [Keywords: ${matchedKws.join(', ')}]`);
+        });
+      }
+
+      // Scrape content from relevant articles
+      for (const article of relevantArticles) {
+        try {
+          await page.goto(article.link, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await new Promise(resolve => setTimeout(resolve, delayMs)); // Rate limiting
+
+          // Extract article content from Suara Kalbar
+          const articleData = await page.evaluate(({ articleTitle, articleLink }) => {
+            // Content selectors for Suara Kalbar (WordPress-based)
+            const contentSelectors = [
+              '.entry-content',
+              '.post-content',
+              '.article-content',
+              '.content',
+              'article .content',
+              '.post-body',
+              '.article-body',
+              '.main-content',
+              '.wp-block-group',
+              
+              // WordPress block editor content
+              '.wp-block-paragraph',
+              
+              // Generic selectors
+              'article p',
+              '.content p',
+              'main p',
+              'p'
+            ];
+
+            let content = '';
+            let usedSelector = '';
+            
+            for (const selector of contentSelectors) {
+              const contentElement = document.querySelector(selector);
+              if (contentElement) {
+                let tempContent = '';
+                
+                // If selector targets paragraphs, collect all paragraph text
+                if (selector.includes('p')) {
+                  const paragraphs = document.querySelectorAll(selector);
+                  tempContent = Array.from(paragraphs)
+                    .map(p => {
+                      // Clean paragraphs
+                      const pClone = p.cloneNode(true) as Element;
+                      pClone.querySelectorAll('style, script, noscript, .advertisement, .ads, .social').forEach(el => el.remove());
+                      pClone.removeAttribute('style');
+                      return pClone.textContent?.trim();
+                    })
+                    .filter(text => text && text.length > 20) // Filter out short paragraphs
+                    .join(' ');
+                } else {
+                  // Clean the element
+                  const contentClone = contentElement.cloneNode(true) as Element;
+                  contentClone.querySelectorAll('style, script, noscript, .advertisement, .ads, .social, .wp-block-buttons').forEach(el => el.remove());
+                  contentClone.removeAttribute('style');
+                  tempContent = contentClone.textContent?.trim() || '';
+                }
+                
+                if (tempContent.length > 100) {
+                  content = tempContent;
+                  usedSelector = selector;
+                  break;
+                }
+              }
+            }
+            
+            console.log(`[SUARA KALBAR] Content extracted using selector: ${usedSelector}, length: ${content.length}`);
+
+            // Try to extract date for Suara Kalbar
+            const dateSelectors = [
+              // WordPress common selectors
+              'time[datetime]',
+              '[datetime]',
+              '.post-date',
+              '.published-date',
+              '.entry-date',
+              '.date',
+              'time',
+              '.meta-date',
+              
+              // WordPress meta sections
+              '.post-meta time',
+              '.entry-meta time',
+              '.entry-meta .date',
+              '.post-meta .date',
+              '.article-meta .date',
+              '.wp-block-post-date',
+              
+              // Author and date info
+              '.byline',
+              '.post-info',
+              '.article-info',
+              '.meta-info'
+            ];
+
+            let dateString = '';
+            let foundSelector = '';
+            
+            for (const selector of dateSelectors) {
+              const dateElements = document.querySelectorAll(selector);
+              for (const dateElement of dateElements) {
+                const potentialDate = dateElement.getAttribute('datetime') || 
+                                  dateElement.getAttribute('content') ||
+                                  dateElement.textContent?.trim() || '';
+                                  
+                if (potentialDate && potentialDate.length > 5) {
+                  // Basic validation for dates
+                  const hasNumbers = /\d/.test(potentialDate);
+                  const hasDateKeywords = /\b(20\d{2}|januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(potentialDate);
+                  const hasDateFormats = potentialDate.includes('-') || potentialDate.includes('/') || potentialDate.includes('T') || potentialDate.includes(',');
+                  
+                  if (hasNumbers && (hasDateKeywords || hasDateFormats)) {
+                    dateString = potentialDate;
+                    foundSelector = selector;
+                    console.log(`[SUARA KALBAR] Found date using selector "${selector}": ${dateString}`);
+                    break;
+                  }
+                }
+              }
+              if (dateString) break;
+            }
+            
+            // If no date found, try meta tags
+            if (!dateString) {
+              const metaSelectors = [
+                'meta[property="article:published_time"]',
+                'meta[property="article:modified_time"]',
+                'meta[name="DC.date.issued"]',
+                'meta[name="date"]',
+                'meta[itemprop="datePublished"]',
+                'meta[itemprop="dateModified"]'
+              ];
+              
+              for (const selector of metaSelectors) {
+                const metaElement = document.querySelector(selector);
+                if (metaElement) {
+                  const content = metaElement.getAttribute('content') || '';
+                  if (content) {
+                    dateString = content;
+                    foundSelector = selector;
+                    console.log(`[SUARA KALBAR] Found date using meta selector "${selector}": ${dateString}`);
+                    break;
+                  }
+                }
+              }
+            }
+
+            return {
+              title: articleTitle,
+              content: content || 'Content could not be extracted',
+              link: articleLink,
+              dateString,
+            };
+          }, { articleTitle: article.title, articleLink: article.link });
+
+          // Parse date using enhanced Indonesian date parser
+          let articleDate: Date;
+          if (articleData.dateString) {
+            console.log(`\n🔍 [SUARA KALBAR] Processing article: "${articleData.title.substring(0, 60)}..."`);
+            console.log(`📅 Raw date string found: "${articleData.dateString}"`);
+            articleDate = parseIndonesianDate(articleData.dateString);
+            
+            const wasCurrentDate = Math.abs(articleDate.getTime() - new Date().getTime()) < 24 * 60 * 60 * 1000;
+            if (wasCurrentDate) {
+              console.log(`⚠️  WARNING: Date parsing may have failed - using current date (${articleDate.toISOString().split('T')[0]})`);
+            } else {
+              console.log(`✅ Successfully parsed date: ${articleDate.toISOString().split('T')[0]} (${articleDate.toLocaleDateString('id-ID')})`);
+            }
+          } else {
+            articleDate = new Date();
+            console.log(`\n❌ [SUARA KALBAR] NO DATE FOUND for "${articleData.title.substring(0, 60)}..."`);
+            console.log(`Using current date as fallback: ${articleDate.toISOString().split('T')[0]}`);
+          }
+
+          // Find matched keywords
+          const matchedKeywords = keywords.filter(keyword => 
+            articleData.title.toLowerCase().includes(keyword) || 
+            articleData.content.toLowerCase().includes(keyword)
+          );
+
+          if (matchedKeywords.length > 0) {
+            // Check for duplicates before processing
+            const isDuplicate = await checkDuplicateArticle(
+              articleData.title, 
+              articleData.link, 
+              processedUrls, 
+              processedTitles
+            );
+            
+            if (isDuplicate) {
+              result.duplicates++;
+              console.log(`⚠ [SUARA KALBAR] Skipping duplicate: ${articleData.title.substring(0, 50)}...`);
+              continue;
+            }
+            
+            // Add to processed sets
+            processedUrls.add(articleData.link.toLowerCase());
+            processedTitles.add(articleData.title.toLowerCase().trim());
+
+            const scrapedItem: ScrapedNewsItem = {
+              title: articleData.title,
+              content: cleanContent(articleData.content),
+              link: articleData.link,
+              date: articleDate,
+              portal: 'suarakalbar.co.id',
+              matchedKeywords,
+            };
+
+            // Generate unique ID for the news
+            const idBerita = `sk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            // Try to save to database
+            try {
+              await prisma.scrappingBerita.create({
+                data: {
+                  idBerita,
+                  portalBerita: scrapedItem.portal,
+                  linkBerita: scrapedItem.link,
+                  judul: scrapedItem.title,
+                  isi: scrapedItem.content,
+                  tanggalBerita: scrapedItem.date,
+                  matchedKeywords: scrapedItem.matchedKeywords,
+                },
+              });
+
+              // Update keyword match counts
+              await prisma.scrappingKeyword.updateMany({
+                where: { keyword: { in: scrapedItem.matchedKeywords } },
+                data: { matchCount: { increment: 1 } },
+              });
+
+              result.newItems++;
+              result.scrapedItems.push(scrapedItem);
+              console.log(`✓ [SUARA KALBAR] SAVED: ${scrapedItem.title.substring(0, 50)}...`);
+              console.log(`  📅 Date: ${scrapedItem.date.toISOString().split('T')[0]}`);
+              console.log(`  🏷️  Keywords: [${scrapedItem.matchedKeywords.join(', ')}]`);
+
+            } catch (dbError: unknown) {
+              if ((dbError as { code?: string }).code === 'P2002') {
+                result.duplicates++;
+                console.log(`⚠ [SUARA KALBAR] Duplicate: ${scrapedItem.title.substring(0, 50)}...`);
+              } else {
+                const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+                result.errors.push(`Database error: ${errorMessage}`);
+                console.error('Database error:', dbError);
+              }
+            }
+
+            result.totalScraped++;
+          }
+
+        } catch (articleError: unknown) {
+          const errorMessage = articleError instanceof Error ? articleError.message : 'Unknown article error';
+          console.error(`Error scraping Suara Kalbar article ${article.link}:`, errorMessage);
+          result.errors.push(`Article error: ${errorMessage}`);
+        }
+      }
+
+      // Check if we should continue to next page - Suara Kalbar pagination
+      const hasNextPage = await page.evaluate((currentPage) => {
+        console.log(`[SUARA KALBAR] === PAGINATION DEBUG FOR PAGE ${currentPage} ===`);
+        
+        // Debug: Show all elements that might be pagination
+        const allLinks = document.querySelectorAll('a');
+        console.log(`[SUARA KALBAR] Total links found: ${allLinks.length}`);
+        
+        // Look for any elements with "ray" class
+        const rayElements = document.querySelectorAll('[class*="ray"]');
+        console.log(`[SUARA KALBAR] Elements with "ray" class: ${rayElements.length}`);
+        rayElements.forEach((el, idx) => {
+          if (idx < 5) { // Log first 5 only
+            console.log(`  ${idx + 1}. ${el.tagName}.${el.className} - Text: "${el.textContent?.trim().substring(0, 50)}"`);
+          }
+        });
+        
+        // Look for pagination section
+        const rayPaginationSection = document.querySelector('.ray-posts-pagination');
+        if (rayPaginationSection) {
+          console.log(`[SUARA KALBAR] Found pagination section:`, rayPaginationSection.outerHTML);
+        } else {
+          console.log(`[SUARA KALBAR] ❌ No .ray-posts-pagination found`);
+        }
+        
+        // Look for "Selanjutnya" text in any element
+        let selanjutnyaFound = false;
+        allLinks.forEach((link, idx) => {
+          const linkText = link.textContent?.trim() || '';
+          const href = link.getAttribute('href') || '';
+          
+          if (linkText.toLowerCase().includes('selanjutnya')) {
+            console.log(`[SUARA KALBAR] 🎯 FOUND "Selanjutnya" link #${idx}: "${linkText}" -> ${href}`);
+            console.log(`[SUARA KALBAR] Link classes: "${link.className}"`);
+            console.log(`[SUARA KALBAR] Parent element: ${link.parentElement?.tagName}.${link.parentElement?.className}`);
+            selanjutnyaFound = true;
+          }
+          
+          // Also check for /page/ URLs
+          if (href.includes('/page/') && href.includes(`/${currentPage + 1}/`)) {
+            console.log(`[SUARA KALBAR] 🎯 FOUND next page URL #${idx}: "${linkText}" -> ${href}`);
+            selanjutnyaFound = true;
+          }
+        });
+        
+        if (!selanjutnyaFound) {
+          console.log(`[SUARA KALBAR] ❌ No "Selanjutnya" or next page URL found`);
+          
+          // Debug: show any links with "page" in text or href
+          console.log(`[SUARA KALBAR] Links with "page" in text or href:`);
+          allLinks.forEach((link, idx) => {
+            const linkText = link.textContent?.trim() || '';
+            const href = link.getAttribute('href') || '';
+            
+            if (linkText.toLowerCase().includes('page') || href.includes('/page/')) {
+              console.log(`  ${idx + 1}. "${linkText}" -> ${href}`);
+            }
+          });
+        }
+        
+        // Multiple approaches to find next page link
+        
+        // Approach 1: Look for "Selanjutnya" text
+        const nextPageLink1 = Array.from(allLinks).find(link => {
+          const text = link.textContent?.trim().toLowerCase() || '';
+          const href = link.getAttribute('href') || '';
+          
+          return text.includes('selanjutnya') && href.includes('/page/');
+        });
+        
+        // Approach 2: Look for next page URL pattern
+        const nextPageLink2 = Array.from(allLinks).find(link => {
+          const href = link.getAttribute('href') || '';
+          return href.includes(`/page/${currentPage + 1}/`);
+        });
+        
+        // Approach 3: Simple fallback - if we're on page 1, look for /page/2/
+        const nextPageLink3 = currentPage === 1 ? 
+          Array.from(allLinks).find(link => {
+            const href = link.getAttribute('href') || '';
+            return href.includes('/page/2/');
+          }) : null;
+        
+        const finalNextPageLink = nextPageLink1 || nextPageLink2 || nextPageLink3;
+        
+        if (finalNextPageLink) {
+          const href = finalNextPageLink.getAttribute('href') || '';
+          console.log(`[SUARA KALBAR] ✅ NEXT PAGE CONFIRMED: ${href}`);
+          return true;
+        }
+        
+        // Last resort: assume there are more pages if we haven't reached the limit
+        // This is a fallback for when pagination doesn't load properly
+        if (currentPage < 3) { // Only for first few pages
+          console.log(`[SUARA KALBAR] 🔄 FALLBACK: Assuming more pages exist (page ${currentPage})`);
+          
+          // Check if URL pattern would work for next page
+          const expectedNextUrl = `https://www.suarakalbar.co.id/category/kalbar/page/${currentPage + 1}/`;
+          console.log(`[SUARA KALBAR] 🔄 Will try: ${expectedNextUrl}`);
+          return true;
+        }
+        
+        console.log(`[SUARA KALBAR] ❌ NO NEXT PAGE FOUND - STOPPING`);
+        console.log(`[SUARA KALBAR] === END PAGINATION DEBUG ===`);
+        return false;
+      }, currentPage);
+
+      if (!hasNextPage) {
+        console.log('No more pages found on Suara Kalbar, stopping pagination');
+        break;
+      }
+
+      // Summary for this page
+      console.log(`\n=== SUARA KALBAR PAGE ${currentPage} SUMMARY ===`);
+      console.log(`Total articles found: ${articles.length}`);
+      console.log(`Relevant articles (with keywords): ${relevantArticles.length}`);
+      console.log(`Articles processed in this page: ${relevantArticles.length}`);
+      console.log(`Running total - New items: ${result.newItems}, Duplicates: ${result.duplicates}`);
+      console.log(`=== END PAGE SUMMARY ===\n`);
+
+      currentPage++;
+      await new Promise(resolve => setTimeout(resolve, delayMs)); // Rate limiting between pages
+
+    } catch (pageError: unknown) {
+      const errorMessage = pageError instanceof Error ? pageError.message : 'Unknown page error';
+      console.error(`❌ Error scraping Suara Kalbar page ${currentPage}:`, errorMessage);
+      result.errors.push(`Page ${currentPage} error: ${errorMessage}`);
+      break; // Stop pagination on page error
+    }
+  }
+  
+  // Final summary for Suara Kalbar scraping
+  console.log(`\n🎯 === SUARA KALBAR SCRAPING COMPLETE ===`);
+  console.log(`📄 Pages scraped: ${currentPage - 1}`);
+  console.log(`📰 New articles saved: ${result.newItems}`);
+  console.log(`🔄 Duplicates skipped: ${result.duplicates}`);
+  console.log(`❌ Errors encountered: ${result.errors.length}`);
+  console.log(`=== END SUARA KALBAR SCRAPING ===\n`);
 }
