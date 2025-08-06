@@ -181,3 +181,19 @@ model ScrappingBerita {
   @@index([portalBerita])
   @@map("scrapping_berita")
 }
+
+model ScrappingSchedule {
+  id           String    @id @default(cuid())
+  name         String    // Nama jadwal (e.g., "Daily Pontianak Post")
+  portalUrl    String    // URL portal (dari ALLOWED_PORTALS yang sudah ada)
+  maxPages     Int       @default(5)
+  delayMs      Int       @default(2000)
+  cronSchedule String    // Cron expression (e.g., "0 8 * * *" = jam 8 pagi)
+  isActive     Boolean   @default(true)
+  lastRun      DateTime?
+  nextRun      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("scrapping_schedules")
+}

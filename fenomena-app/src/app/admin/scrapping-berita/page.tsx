@@ -187,6 +187,12 @@ export default function ScrappingBeritaPage() {
             </div>
             <div className="flex items-center space-x-4">
               <Link 
+                href="/admin/manage-scraping"
+                className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+              >
+                Schedule Scraping
+              </Link>
+              <Link 
                 href="/admin/scrapping-keywords"
                 className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
               >
