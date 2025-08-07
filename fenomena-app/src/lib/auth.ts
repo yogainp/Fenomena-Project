@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from './prisma';
+import { supabase } from './supabase';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret';
 
@@ -44,44 +44,51 @@ export async function createUser(params: {
 }) {
   const hashedPassword = await hashPassword(params.password);
   
-  return prisma.user.create({
-    data: {
+  const { data, error } = await supabase
+    .from('users')
+    .insert({
+      id: crypto.randomUUID(),
       email: params.email,
       username: params.username,
       password: hashedPassword,
       role: params.role || 'USER',
       regionId: params.regionId || null,
       isVerified: params.isVerified || false,
-      verifiedAt: params.isVerified ? new Date() : null,
-    },
-    select: {
-      id: true,
-      email: true,
-      username: true,
-      role: true,
-      regionId: true,
-      region: {
-        select: {
-          id: true,
-          province: true,
-          city: true,
-          regionCode: true,
-        },
-      },
-      isVerified: true,
-      verifiedAt: true,
-      createdAt: true,
-    },
-  });
+      verifiedAt: params.isVerified ? new Date().toISOString() : null,
+    })
+    .select(`
+      id,
+      email,
+      username,
+      role,
+      regionId,
+      region:regions(*),
+      isVerified,
+      verifiedAt,
+      createdAt
+    `)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create user: ${error.message}`);
+  }
+
+  return data;
 }
 
 export async function authenticateUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: {
-      region: true,
-    },
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select(`
+      *,
+      region:regions(*)
+    `)
+    .eq('email', email)
+    .single();
+
+  if (error || !user) {
+    return null;
+  }
 
   if (!user) {
     return null;

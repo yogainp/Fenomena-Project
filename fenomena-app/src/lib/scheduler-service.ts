@@ -1,5 +1,5 @@
 import * as cron from 'node-cron';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
 
 interface ScheduledJob {
@@ -20,9 +20,14 @@ class SchedulerService {
     
     try {
       // Load all active schedules from database
-      const activeSchedules = await prisma.scrappingSchedule.findMany({
-        where: { isActive: true }
-      });
+      const { data: activeSchedules, error } = await supabase
+        .from('scrapping_schedules')
+        .select('*')
+        .eq('isActive', true);
+
+      if (error) {
+        throw new Error(`Failed to load schedules: ${error.message}`);
+      }
 
       console.log(`📋 Found ${activeSchedules.length} active schedules`);
 
@@ -60,10 +65,14 @@ class SchedulerService {
 
       // Calculate next run time
       const nextRun = this.getNextRunTime(schedule.cronSchedule);
-      await prisma.scrappingSchedule.update({
-        where: { id: schedule.id },
-        data: { nextRun }
-      });
+      const { error: updateError } = await supabase
+        .from('scrapping_schedules')
+        .update({ nextRun: nextRun.toISOString() })
+        .eq('id', schedule.id);
+
+      if (updateError) {
+        console.error('Failed to update next run time:', updateError);
+      }
 
       console.log(`✅ Created cron job for "${schedule.name}" with schedule: ${schedule.cronSchedule}`);
     } catch (error) {
@@ -76,9 +85,16 @@ class SchedulerService {
     
     try {
       // Get schedule details
-      const schedule = await prisma.scrappingSchedule.findUnique({
-        where: { id: scheduleId }
-      });
+      const { data: schedule, error } = await supabase
+        .from('scrapping_schedules')
+        .select('*')
+        .eq('id', scheduleId)
+        .single();
+
+      if (error) {
+        console.error('Failed to get schedule:', error);
+        return;
+      }
 
       if (!schedule || !schedule.isActive) {
         console.log(`⚠️ Schedule ${scheduleId} is inactive or not found`);
@@ -89,13 +105,17 @@ class SchedulerService {
       const now = new Date();
       const nextRun = this.getNextRunTime(schedule.cronSchedule);
       
-      await prisma.scrappingSchedule.update({
-        where: { id: scheduleId },
-        data: { 
-          lastRun: now,
-          nextRun: nextRun
-        }
-      });
+      const { error: updateError } = await supabase
+        .from('scrapping_schedules')
+        .update({ 
+          lastRun: now.toISOString(),
+          nextRun: nextRun.toISOString()
+        })
+        .eq('id', scheduleId);
+
+      if (updateError) {
+        console.error('Failed to update schedule run times:', updateError);
+      }
 
       // Execute scraping using existing service
       console.log(`🔍 Starting scraping for "${schedule.name}" from ${schedule.portalUrl}`);
@@ -117,15 +137,19 @@ class SchedulerService {
       console.error(`❌ Failed to execute scheduled scraping for ${scheduleId}:`, error);
       
       // Update schedule with error information if needed
-      await prisma.scrappingSchedule.update({
-        where: { id: scheduleId },
-        data: { 
-          lastRun: new Date(),
-          nextRun: this.getNextRunTime((await prisma.scrappingSchedule.findUnique({
-            where: { id: scheduleId }
-          }))?.cronSchedule || '0 0 * * *')
-        }
-      });
+      const { data: scheduleForCron } = await supabase
+        .from('scrapping_schedules')
+        .select('cronSchedule')
+        .eq('id', scheduleId)
+        .single();
+      
+      await supabase
+        .from('scrapping_schedules')
+        .update({ 
+          lastRun: new Date().toISOString(),
+          nextRun: this.getNextRunTime(scheduleForCron?.cronSchedule || '0 0 * * *').toISOString()
+        })
+        .eq('id', scheduleId);
     }
   }
 
@@ -153,17 +177,24 @@ class SchedulerService {
       console.log(`➕ Adding new schedule: ${scheduleData.name}`);
       
       // Create schedule in database
-      const schedule = await prisma.scrappingSchedule.create({
-        data: {
+      const { data: schedule, error } = await supabase
+        .from('scrapping_schedules')
+        .insert({
+          id: crypto.randomUUID(),
           name: scheduleData.name,
           portalUrl: scheduleData.portalUrl,
           maxPages: scheduleData.maxPages || 5,
           delayMs: scheduleData.delayMs || 2000,
           cronSchedule: scheduleData.cronSchedule,
           isActive: scheduleData.isActive !== false,
-          nextRun: this.getNextRunTime(scheduleData.cronSchedule)
-        }
-      });
+          nextRun: this.getNextRunTime(scheduleData.cronSchedule).toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Failed to create schedule: ${error.message}`);
+      }
 
       // Create cron job if active
       if (schedule.isActive) {
@@ -191,14 +222,20 @@ class SchedulerService {
       }
 
       // Update schedule in database
-      const updatedSchedule = await prisma.scrappingSchedule.update({
-        where: { id: scheduleId },
-        data: {
+      const { data: updatedSchedule, error } = await supabase
+        .from('scrapping_schedules')
+        .update({
           ...updateData,
-          nextRun: updateData.cronSchedule ? this.getNextRunTime(updateData.cronSchedule) : undefined,
-          updatedAt: new Date()
-        }
-      });
+          nextRun: updateData.cronSchedule ? this.getNextRunTime(updateData.cronSchedule).toISOString() : undefined,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', scheduleId)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Failed to update schedule: ${error.message}`);
+      }
 
       // Create new cron job if active
       if (updatedSchedule.isActive) {
@@ -226,9 +263,14 @@ class SchedulerService {
       }
 
       // Delete from database
-      await prisma.scrappingSchedule.delete({
-        where: { id: scheduleId }
-      });
+      const { error } = await supabase
+        .from('scrapping_schedules')
+        .delete()
+        .eq('id', scheduleId);
+
+      if (error) {
+        throw new Error(`Failed to delete schedule: ${error.message}`);
+      }
 
       console.log(`✅ Schedule deleted successfully`);
     } catch (error) {
@@ -241,9 +283,15 @@ class SchedulerService {
     try {
       console.log(`🔄 Toggling schedule: ${scheduleId}`);
 
-      const schedule = await prisma.scrappingSchedule.findUnique({
-        where: { id: scheduleId }
-      });
+      const { data: schedule, error } = await supabase
+        .from('scrapping_schedules')
+        .select('*')
+        .eq('id', scheduleId)
+        .single();
+
+      if (error) {
+        throw new Error(`Failed to get schedule: ${error.message}`);
+      }
 
       if (!schedule) {
         throw new Error('Schedule not found');
@@ -252,13 +300,19 @@ class SchedulerService {
       const newActiveState = !schedule.isActive;
 
       // Update database
-      const updatedSchedule = await prisma.scrappingSchedule.update({
-        where: { id: scheduleId },
-        data: { 
+      const { data: updatedSchedule, error: updateError } = await supabase
+        .from('scrapping_schedules')
+        .update({ 
           isActive: newActiveState,
-          nextRun: newActiveState ? this.getNextRunTime(schedule.cronSchedule) : null
-        }
-      });
+          nextRun: newActiveState ? this.getNextRunTime(schedule.cronSchedule).toISOString() : null
+        })
+        .eq('id', scheduleId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error(`Failed to toggle schedule: ${updateError.message}`);
+      }
 
       // Handle cron job
       const existingJob = this.scheduledJobs.get(scheduleId);
@@ -290,9 +344,14 @@ class SchedulerService {
 
   async getAllSchedules() {
     try {
-      const schedules = await prisma.scrappingSchedule.findMany({
-        orderBy: { createdAt: 'desc' }
-      });
+      const { data: schedules, error } = await supabase
+        .from('scrapping_schedules')
+        .select('*')
+        .order('createdAt', { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to get schedules: ${error.message}`);
+      }
       return schedules;
     } catch (error) {
       console.error('❌ Failed to get schedules:', error);

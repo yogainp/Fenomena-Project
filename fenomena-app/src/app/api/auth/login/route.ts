@@ -46,10 +46,11 @@ export async function POST(request: NextRequest) {
     // Set HTTP-only cookie for security
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to false for development (localhost)
       sameSite: 'lax', // Changed from 'strict' to 'lax' for better browser compatibility
       maxAge: 86400, // 24 hours
       path: '/',
+      domain: undefined, // Let browser set domain automatically
     });
 
     return response;

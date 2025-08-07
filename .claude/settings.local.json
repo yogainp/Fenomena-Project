@@ -18,7 +18,12 @@
       "WebFetch(domain:kalbar.antaranews.com)",
       "Bash(node:*)",
       "Bash(git add:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(find:*)",
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(copy:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/middleware';
-import { hashPassword } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import { verifyToken, hashPassword } from '@/lib/auth';
 import { z } from 'zod';
 
 const updateProfileSchema = z.object({
@@ -27,49 +26,49 @@ const updateProfileSchema = z.object({
 // GET /api/profile - Get current user profile
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
 
-    const userProfile = await prisma.user.findUnique({
-      where: { id: user.userId },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        regionId: true,
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
 
-    if (!userProfile) {
+    // Get user data from Supabase
+    const { data: userProfile, error } = await supabase
+      .from('users')
+      .select(`
+        id,
+        email,
+        username,
+        role,
+        regionId,
+        isVerified,
+        createdAt,
+        updatedAt,
+        region:regions(
+          id,
+          province,
+          city,
+          regionCode
+        )
+      `)
+      .eq('id', user.userId)
+      .single();
+
+    if (error || !userProfile) {
+      console.error('Profile fetch error:', error);
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      ...userProfile,
-      phenomenaCount: userProfile._count.phenomena,
-      _count: undefined,
-    });
+    return NextResponse.json(userProfile);
 
   } catch (error: any) {
     console.error('Get profile error:', error);
-    if (error.message.includes('required')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
-    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { chromium, Browser, Page } from 'playwright';
-import { prisma } from './prisma';
+import { supabase } from './supabase';
+import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
 interface ScrapingOptions {
   portalUrl: string;
@@ -42,16 +43,9 @@ async function checkDuplicateArticle(
   }
   
   // Check database for existing articles
-  const existingArticle = await prisma.scrappingBerita.findFirst({
-    where: {
-      OR: [
-        { linkBerita: url },
-        { judul: title }
-      ]
-    }
-  });
+  const exists = await checkExistingArticle(url, title);
   
-  if (existingArticle) {
+  if (exists) {
     // Add to processed sets to avoid future database queries
     processedUrls.add(normalizedUrl);
     processedTitles.add(normalizedTitle);
@@ -76,10 +70,7 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
 
   try {
     // Get active keywords from database
-    const activeKeywords = await prisma.scrappingKeyword.findMany({
-      where: { isActive: true },
-      select: { keyword: true },
-    });
+    const activeKeywords = await getActiveKeywords();
 
     if (activeKeywords.length === 0) {
       throw new Error('No active keywords found. Please add keywords first.');
@@ -1099,23 +1090,18 @@ async function scrapePontianakPost(
 
             // Try to save to database
             try {
-              await prisma.scrappingBerita.create({
-                data: {
-                  idBerita,
-                  portalBerita: scrapedItem.portal,
-                  linkBerita: scrapedItem.link,
-                  judul: scrapedItem.title,
-                  isi: scrapedItem.content,
-                  tanggalBerita: scrapedItem.date,
-                  matchedKeywords: scrapedItem.matchedKeywords,
-                },
+              await saveScrapedArticle({
+                idBerita,
+                portalBerita: scrapedItem.portal,
+                linkBerita: scrapedItem.link,
+                judul: scrapedItem.title,
+                isi: scrapedItem.content,
+                tanggalBerita: scrapedItem.date,
+                matchedKeywords: scrapedItem.matchedKeywords,
               });
 
               // Update keyword match counts
-              await prisma.scrappingKeyword.updateMany({
-                where: { keyword: { in: scrapedItem.matchedKeywords } },
-                data: { matchCount: { increment: 1 } },
-              });
+              await incrementKeywordMatchCount(scrapedItem.matchedKeywords);
 
               result.newItems++;
               result.scrapedItems.push(scrapedItem);
@@ -1585,23 +1571,18 @@ async function scrapeKalbarOnline(
 
             // Try to save to database
             try {
-              await prisma.scrappingBerita.create({
-                data: {
-                  idBerita,
-                  portalBerita: scrapedItem.portal,
-                  linkBerita: scrapedItem.link,
-                  judul: scrapedItem.title,
-                  isi: scrapedItem.content,
-                  tanggalBerita: scrapedItem.date,
-                  matchedKeywords: scrapedItem.matchedKeywords,
-                },
+              await saveScrapedArticle({
+                idBerita,
+                portalBerita: scrapedItem.portal,
+                linkBerita: scrapedItem.link,
+                judul: scrapedItem.title,
+                isi: scrapedItem.content,
+                tanggalBerita: scrapedItem.date,
+                matchedKeywords: scrapedItem.matchedKeywords,
               });
 
               // Update keyword match counts
-              await prisma.scrappingKeyword.updateMany({
-                where: { keyword: { in: scrapedItem.matchedKeywords } },
-                data: { matchCount: { increment: 1 } },
-              });
+              await incrementKeywordMatchCount(scrapedItem.matchedKeywords);
 
               result.newItems++;
               result.scrapedItems.push(scrapedItem);
@@ -2026,23 +2007,18 @@ async function scrapeAntaraNews(
 
             // Try to save to database
             try {
-              await prisma.scrappingBerita.create({
-                data: {
-                  idBerita,
-                  portalBerita: scrapedItem.portal,
-                  linkBerita: scrapedItem.link,
-                  judul: scrapedItem.title,
-                  isi: scrapedItem.content,
-                  tanggalBerita: scrapedItem.date,
-                  matchedKeywords: scrapedItem.matchedKeywords,
-                },
+              await saveScrapedArticle({
+                idBerita,
+                portalBerita: scrapedItem.portal,
+                linkBerita: scrapedItem.link,
+                judul: scrapedItem.title,
+                isi: scrapedItem.content,
+                tanggalBerita: scrapedItem.date,
+                matchedKeywords: scrapedItem.matchedKeywords,
               });
 
               // Update keyword match counts
-              await prisma.scrappingKeyword.updateMany({
-                where: { keyword: { in: scrapedItem.matchedKeywords } },
-                data: { matchCount: { increment: 1 } },
-              });
+              await incrementKeywordMatchCount(scrapedItem.matchedKeywords);
 
               result.newItems++;
               result.scrapedItems.push(scrapedItem);
@@ -2452,23 +2428,18 @@ async function scrapeSuaraKalbar(
 
             // Try to save to database
             try {
-              await prisma.scrappingBerita.create({
-                data: {
-                  idBerita,
-                  portalBerita: scrapedItem.portal,
-                  linkBerita: scrapedItem.link,
-                  judul: scrapedItem.title,
-                  isi: scrapedItem.content,
-                  tanggalBerita: scrapedItem.date,
-                  matchedKeywords: scrapedItem.matchedKeywords,
-                },
+              await saveScrapedArticle({
+                idBerita,
+                portalBerita: scrapedItem.portal,
+                linkBerita: scrapedItem.link,
+                judul: scrapedItem.title,
+                isi: scrapedItem.content,
+                tanggalBerita: scrapedItem.date,
+                matchedKeywords: scrapedItem.matchedKeywords,
               });
 
               // Update keyword match counts
-              await prisma.scrappingKeyword.updateMany({
-                where: { keyword: { in: scrapedItem.matchedKeywords } },
-                data: { matchCount: { increment: 1 } },
-              });
+              await incrementKeywordMatchCount(scrapedItem.matchedKeywords);
 
               result.newItems++;
               result.scrapedItems.push(scrapedItem);

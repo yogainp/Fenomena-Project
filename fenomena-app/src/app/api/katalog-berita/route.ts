@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 // GET /api/katalog-berita - Get news catalog for public access
 export async function GET(request: NextRequest) {

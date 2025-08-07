@@ -24,6 +24,7 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Important: Include cookies in request
         body: JSON.stringify(formData),
       });
 

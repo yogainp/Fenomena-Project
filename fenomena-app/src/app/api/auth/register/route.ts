@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createUser } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
@@ -16,16 +16,13 @@ export async function POST(request: NextRequest) {
     const validatedData = registerSchema.parse(body);
 
     // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: validatedData.email },
-          { username: validatedData.username },
-        ],
-      },
-    });
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .or(`email.eq.${validatedData.email},username.eq.${validatedData.username}`)
+      .limit(1);
 
-    if (existingUser) {
+    if (existingUser && existingUser.length > 0) {
       return NextResponse.json(
         { error: 'User with this email or username already exists' },
         { status: 400 }
@@ -34,11 +31,13 @@ export async function POST(request: NextRequest) {
 
     // Verify region exists
     if (validatedData.regionId) {
-      const region = await prisma.region.findUnique({
-        where: { id: validatedData.regionId },
-      });
+      const { data: region, error } = await supabase
+        .from('regions')
+        .select('id')
+        .eq('id', validatedData.regionId)
+        .single();
       
-      if (!region) {
+      if (error || !region) {
         return NextResponse.json(
           { error: 'Invalid region selected' },
           { status: 400 }

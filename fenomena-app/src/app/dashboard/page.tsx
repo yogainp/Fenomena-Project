@@ -23,7 +23,9 @@ export default function DashboardPage() {
   const fetchUserData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/profile');
+      const response = await fetch('/api/profile', {
+        credentials: 'include' // Important: Include cookies in request
+      });
       
       if (response.ok) {
         const userData = await response.json();
@@ -49,6 +51,7 @@ export default function DashboardPage() {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include' // Important: Include cookies in request
       });
       router.push('/login');
     } catch (error) {

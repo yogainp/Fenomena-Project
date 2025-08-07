@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireAuth } from '@/lib/middleware';
 
 // GET /api/regions - Get all regions for dropdown selection
@@ -7,18 +7,16 @@ export async function GET(request: NextRequest) {
   try {
     // Remove auth requirement for registration page access
 
-    const regions = await prisma.region.findMany({
-      select: {
-        id: true,
-        province: true,
-        city: true,
-        regionCode: true,
-      },
-      orderBy: [
-        { province: 'asc' },
-        { city: 'asc' },
-      ],
-    });
+    const { data: regions, error } = await supabase
+      .from('regions')
+      .select('id, province, city, regionCode')
+      .order('province', { ascending: true })
+      .order('city', { ascending: true });
+
+    if (error) {
+      console.error('Database error:', error);
+      return NextResponse.json({ error: 'Failed to fetch regions' }, { status: 500 });
+    }
 
     return NextResponse.json(regions);
 
