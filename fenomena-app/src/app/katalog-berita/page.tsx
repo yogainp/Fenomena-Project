@@ -304,7 +304,7 @@ export default function KatalogBeritaPublicPage() {
                         </p>
 
                         {/* Keywords */}
-                        {berita.matchedKeywords.length > 0 && (
+                        {berita.matchedKeywords && Array.isArray(berita.matchedKeywords) && berita.matchedKeywords.length > 0 && (
                           <div className="mb-4">
                             <div className="flex flex-wrap gap-1">
                               {berita.matchedKeywords.slice(0, 3).map((keyword, index) => (

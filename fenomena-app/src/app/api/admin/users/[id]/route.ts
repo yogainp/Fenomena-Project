@@ -21,42 +21,52 @@ export async function GET(
   try {
     requireRole(request, 'ADMIN');
 
-    const user = await prisma.user.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        role: true,
-        regionId: true,
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        isVerified: true,
-        verifiedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    // Get user with region data
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select(`
+        id,
+        email,
+        username,
+        role,
+        regionId,
+        isVerified,
+        verifiedAt,
+        createdAt,
+        updatedAt,
+        regions:regionId (
+          id,
+          province,
+          city,
+          regionCode
+        )
+      `)
+      .eq('id', params.id)
+      .single();
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (userError) {
+      if (userError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      console.error('Error fetching user:', userError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get phenomena count for this user
+    const { count: phenomenaCount, error: countError } = await supabase
+      .from('phenomena')
+      .select('*', { count: 'exact', head: true })
+      .eq('userId', params.id);
+
+    if (countError) {
+      console.error('Error counting phenomena:', countError);
     }
 
     return NextResponse.json({
       ...user,
-      phenomenaCount: user._count.phenomena,
-      _count: undefined,
+      region: user.regions,
+      regions: undefined, // Remove the nested object
+      phenomenaCount: phenomenaCount || 0,
     });
 
   } catch (error: any) {
@@ -89,42 +99,54 @@ export async function PUT(
     const updateData = validationResult.data;
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingUser, error: existsError } = await supabase
+      .from('users')
+      .select('id, email, username, isVerified')
+      .eq('id', params.id)
+      .single();
 
-    if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (existsError) {
+      if (existsError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      console.error('Error checking user exists:', existsError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
     // Check for email/username conflicts if they're being updated
     if (updateData.email || updateData.username) {
-      const conflictConditions: any[] = [];
+      const conflicts = [];
       
       if (updateData.email && updateData.email !== existingUser.email) {
-        conflictConditions.push({ email: updateData.email });
+        const { data: emailConflict } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', updateData.email)
+          .neq('id', params.id)
+          .single();
+        
+        if (emailConflict) {
+          conflicts.push('Email already exists');
+        }
       }
       
       if (updateData.username && updateData.username !== existingUser.username) {
-        conflictConditions.push({ username: updateData.username });
+        const { data: usernameConflict } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', updateData.username)
+          .neq('id', params.id)
+          .single();
+        
+        if (usernameConflict) {
+          conflicts.push('Username already exists');
+        }
       }
 
-      if (conflictConditions.length > 0) {
-        const conflictUser = await prisma.user.findFirst({
-          where: {
-            AND: [
-              { id: { not: params.id } },
-              { OR: conflictConditions },
-            ],
-          },
-        });
-
-        if (conflictUser) {
-          const conflictField = conflictUser.email === updateData.email ? 'Email' : 'Username';
-          return NextResponse.json({
-            error: `${conflictField} already exists`,
-          }, { status: 409 });
-        }
+      if (conflicts.length > 0) {
+        return NextResponse.json({
+          error: conflicts[0],
+        }, { status: 409 });
       }
     }
 
@@ -148,42 +170,55 @@ export async function PUT(
       dataToUpdate.password = await hashPassword(updateData.password);
     }
 
+    // Add updatedAt timestamp
+    dataToUpdate.updatedAt = new Date().toISOString();
+
     // Update user
-    const updatedUser = await prisma.user.update({
-      where: { id: params.id },
-      data: dataToUpdate,
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        role: true,
-        regionId: true,
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        isVerified: true,
-        verifiedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update(dataToUpdate)
+      .eq('id', params.id)
+      .select(`
+        id,
+        email,
+        username,
+        role,
+        regionId,
+        isVerified,
+        verifiedAt,
+        createdAt,
+        updatedAt,
+        regions:regionId (
+          id,
+          province,
+          city,
+          regionCode
+        )
+      `)
+      .single();
+
+    if (updateError) {
+      console.error('Error updating user:', updateError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get phenomena count for this user
+    const { count: phenomenaCount, error: countError } = await supabase
+      .from('phenomena')
+      .select('*', { count: 'exact', head: true })
+      .eq('userId', params.id);
+
+    if (countError) {
+      console.error('Error counting phenomena:', countError);
+    }
 
     return NextResponse.json({
       message: 'User updated successfully',
       user: {
         ...updatedUser,
-        phenomenaCount: updatedUser._count.phenomena,
-        _count: undefined,
+        region: updatedUser.regions,
+        regions: undefined, // Remove the nested object
+        phenomenaCount: phenomenaCount || 0,
       },
     });
 
@@ -205,34 +240,47 @@ export async function DELETE(
     requireRole(request, 'ADMIN');
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        username: true,
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    const { data: existingUser, error: existsError } = await supabase
+      .from('users')
+      .select('id, username')
+      .eq('id', params.id)
+      .single();
 
-    if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (existsError) {
+      if (existsError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      console.error('Error checking user exists:', existsError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
     // Check if user has phenomena (optional: you might want to prevent deletion)
-    if (existingUser._count.phenomena > 0) {
+    const { count: phenomenaCount, error: countError } = await supabase
+      .from('phenomena')
+      .select('*', { count: 'exact', head: true })
+      .eq('userId', params.id);
+
+    if (countError) {
+      console.error('Error counting phenomena:', countError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    if (phenomenaCount && phenomenaCount > 0) {
       return NextResponse.json({
-        error: `Cannot delete user. User has ${existingUser._count.phenomena} phenomena. Please reassign or delete phenomena first.`,
+        error: `Cannot delete user. User has ${phenomenaCount} phenomena. Please reassign or delete phenomena first.`,
       }, { status: 400 });
     }
 
     // Delete user
-    await prisma.user.delete({
-      where: { id: params.id },
-    });
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', params.id);
+
+    if (deleteError) {
+      console.error('Error deleting user:', deleteError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: 'User deleted successfully',

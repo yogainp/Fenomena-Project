@@ -10,26 +10,24 @@ export async function GET(
   try {
     requireRole(request, 'ADMIN');
 
-    const berita = await prisma.scrappingBerita.findUnique({
-      where: { id: params.id },
-      include: {
-        analysisResults: {
-          select: {
-            id: true,
-            analysisType: true,
-            results: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
+    const { data: berita, error } = await supabase
+      .from('scrapping_berita')
+      .select('*')
+      .eq('id', params.id)
+      .single();
 
-    if (!berita) {
+    if (error || !berita) {
       return NextResponse.json({ error: 'News not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ berita });
+    // TODO: Add analysis results query if needed
+    // For now, just return the berita without analysis results
+    return NextResponse.json({ 
+      berita: {
+        ...berita,
+        analysisResults: [] // TODO: Query from analysis_results table if exists
+      }
+    });
 
   } catch (error: any) {
     console.error('Get berita error:', error);
@@ -49,18 +47,26 @@ export async function DELETE(
     requireRole(request, 'ADMIN');
 
     // Check if news exists
-    const existingBerita = await prisma.scrappingBerita.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingBerita, error: findError } = await supabase
+      .from('scrapping_berita')
+      .select('*')
+      .eq('id', params.id)
+      .single();
 
-    if (!existingBerita) {
+    if (findError || !existingBerita) {
       return NextResponse.json({ error: 'News not found' }, { status: 404 });
     }
 
-    // Delete news (this will also cascade delete analysis results)
-    await prisma.scrappingBerita.delete({
-      where: { id: params.id },
-    });
+    // Delete news
+    const { error: deleteError } = await supabase
+      .from('scrapping_berita')
+      .delete()
+      .eq('id', params.id);
+      
+    if (deleteError) {
+      console.error('Error deleting berita:', deleteError);
+      throw deleteError;
+    }
 
     return NextResponse.json({
       message: 'News deleted successfully',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 
 const createKeywordSchema = z.object({
   keyword: z.string().min(1, 'Keyword cannot be empty').max(100, 'Keyword too long'),
@@ -63,28 +64,44 @@ export async function GET(request: NextRequest) {
     
     try {
       console.log('Fetching keywords...');
-      keywords = await prisma.scrappingKeyword.findMany({
-        where: whereConditions,
-        orderBy: [
-          { isActive: 'desc' },
-          { matchCount: 'desc' },
-          { createdAt: 'desc' }
-        ],
-        skip,
-        take: limit,
-      });
-      console.log('✓ Keywords fetched:', keywords.length);
+      
+      // Build Supabase query
+      let query = supabase
+        .from('scrapping_keywords')
+        .select('*', { count: 'exact' });
+
+      // Apply filters
+      if (search) {
+        query = query.or(`keyword.ilike.%${search}%,description.ilike.%${search}%`);
+      }
+      if (category) {
+        query = query.ilike('category', `%${category}%`);
+      }
+      if (activeOnly) {
+        query = query.eq('isActive', true);
+      }
+
+      // Apply ordering and pagination
+      query = query
+        .order('isActive', { ascending: false })
+        .order('matchCount', { ascending: false })
+        .order('createdAt', { ascending: false })
+        .range(skip, skip + limit - 1);
+
+      const { data, error, count } = await query;
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
+      keywords = data || [];
+      totalKeywords = count || 0;
+      console.log('✓ Keywords fetched:', keywords.length, 'Total:', totalKeywords);
+      
     } catch (err) {
       console.error('Error fetching keywords:', err);
       keywords = [];
-    }
-    
-    try {
-      console.log('Counting total keywords...');
-      totalKeywords = await prisma.scrappingKeyword.count({ where: whereConditions });
-      console.log('✓ Total keywords counted:', totalKeywords);
-    } catch (err) {
-      console.error('Error counting keywords:', err);
       totalKeywords = 0;
     }
 
@@ -135,10 +152,14 @@ export async function POST(request: NextRequest) {
 
     const { keyword, isActive, category, description } = validationResult.data;
 
+    const keywordValue = keyword.toLowerCase().trim();
+    
     // Check if keyword already exists
-    const existingKeyword = await prisma.scrappingKeyword.findUnique({
-      where: { keyword: keyword.toLowerCase().trim() },
-    });
+    const { data: existingKeyword } = await supabase
+      .from('scrapping_keywords')
+      .select('id')
+      .eq('keyword', keywordValue)
+      .single();
 
     if (existingKeyword) {
       return NextResponse.json({
@@ -147,14 +168,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Create keyword
-    const newKeyword = await prisma.scrappingKeyword.create({
-      data: {
-        keyword: keyword.toLowerCase().trim(),
+    const { data: newKeyword, error: createError } = await supabase
+      .from('scrapping_keywords')
+      .insert({
+        id: randomUUID(),
+        keyword: keywordValue,
         isActive,
         category: category?.trim() || null,
         description: description?.trim() || null,
-      },
-    });
+        matchCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+      .select()
+      .single();
+      
+    if (createError) {
+      console.error('Error creating keyword:', createError);
+      throw createError;
+    }
 
     return NextResponse.json({
       message: 'Keyword created successfully',
@@ -193,16 +225,23 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update keywords
-    const updatedKeywords = await prisma.scrappingKeyword.updateMany({
-      where: {
-        id: { in: keywordIds },
-      },
-      data: validationResult.data,
-    });
+    const { data: updatedKeywords, error: updateError } = await supabase
+      .from('scrapping_keywords')
+      .update({
+        ...validationResult.data,
+        updatedAt: new Date().toISOString()
+      })
+      .in('id', keywordIds)
+      .select();
+      
+    if (updateError) {
+      console.error('Error updating keywords:', updateError);
+      throw updateError;
+    }
 
     return NextResponse.json({
-      message: `Updated ${updatedKeywords.count} keywords successfully`,
-      updatedCount: updatedKeywords.count,
+      message: `Updated ${updatedKeywords?.length || 0} keywords successfully`,
+      updatedCount: updatedKeywords?.length || 0,
     });
 
   } catch (error: any) {

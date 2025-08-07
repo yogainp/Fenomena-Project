@@ -15,40 +15,65 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const customKeywordsParam = searchParams.get('customKeywords');
 
-    // Build filter conditions
-    const whereConditions: any = {};
+    // Build Supabase query with filters
+    let query = supabase
+      .from('scrapping_berita')
+      .select('id, judul, isi, portalBerita, tanggalBerita, matchedKeywords');
+
+    // Apply filters
     if (portalBerita && portalBerita !== 'all') {
-      whereConditions.portalBerita = portalBerita;
-    }
-    if (keyword) {
-      whereConditions.matchedKeywords = {
-        has: keyword,
-      };
+      query = query.eq('portalBerita', portalBerita);
     }
     
-    // Handle date filtering
-    if (startDate || endDate) {
-      whereConditions.tanggalBerita = {};
-      if (startDate) {
-        whereConditions.tanggalBerita.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereConditions.tanggalBerita.lte = new Date(endDate);
-      }
+    if (keyword) {
+      query = query.contains('matchedKeywords', [keyword]);
+    }
+    
+    if (startDate) {
+      query = query.gte('tanggalBerita', startDate);
+    }
+    
+    if (endDate) {
+      query = query.lte('tanggalBerita', endDate);
     }
 
     // Get news articles for analysis with optional filtering
-    const beritaList = await prisma.scrappingBerita.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        judul: true,
-        isi: true,
-        portalBerita: true,
-        tanggalBerita: true,
-        matchedKeywords: true,
-      },
-    });
+    const { data: beritaList, error: beritaError } = await query;
+
+    if (beritaError) {
+      console.error('Error fetching berita for text analysis:', beritaError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    if (!beritaList || beritaList.length === 0) {
+      return NextResponse.json({
+        totalBerita: 0,
+        topKeywords: [],
+        sentimentAnalysis: [
+          { name: 'Positif', value: 0 },
+          { name: 'Negatif', value: 0 },
+          { name: 'Netral', value: 0 },
+        ],
+        portalAnalysis: {},
+        avgContentLength: 0,
+        wordCloudData: [],
+        totalUniqueWords: 0,
+        proximityAnalysis: {},
+        filterInfo: {
+          portalBerita: portalBerita || 'all',
+          keyword: keyword || '',
+          startDate: startDate || '',
+          endDate: endDate || '',
+          isFiltered: Boolean(portalBerita && portalBerita !== 'all') || Boolean(keyword) || Boolean(startDate) || Boolean(endDate)
+        },
+        proximityKeywordsInfo: {
+          defaultKeywords: ['peningkatan', 'penurunan', 'kenaikan', 'krisis', 'pembangunan', 'ekonomi', 'politik', 'sosial'],
+          customKeywords: [],
+          totalKeywords: ['peningkatan', 'penurunan', 'kenaikan', 'krisis', 'pembangunan', 'ekonomi', 'politik', 'sosial'],
+          hasCustomKeywords: false
+        },
+      });
+    }
 
     // Text analysis functions optimized for Indonesian news content
     function extractKeywords(text: string): string[] {

@@ -10,34 +10,29 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') || '';
 
-    // Build where conditions
-    const whereConditions: any = {
-      isActive: true,
-    };
+    // Build Supabase query
+    let query = supabase
+      .from('scrapping_keywords')
+      .select('id, keyword, category, description, matchCount')
+      .eq('isActive', true);
     
     if (category) {
-      whereConditions.category = { contains: category, mode: 'insensitive' };
+      query = query.ilike('category', `%${category}%`);
     }
 
     // Get active keywords
-    const activeKeywords = await prisma.scrappingKeyword.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        keyword: true,
-        category: true,
-        description: true,
-        matchCount: true,
-      },
-      orderBy: [
-        { matchCount: 'desc' },
-        { keyword: 'asc' }
-      ],
-    });
+    const { data: activeKeywords, error } = await query
+      .order('matchCount', { ascending: false })
+      .order('keyword', { ascending: true });
+      
+    if (error) {
+      console.error('Error fetching active keywords:', error);
+      throw error;
+    }
 
     return NextResponse.json({
-      keywords: activeKeywords,
-      total: activeKeywords.length,
+      keywords: activeKeywords || [],
+      total: activeKeywords?.length || 0,
     });
 
   } catch (error: any) {

@@ -1,68 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { requireAuth } from '@/lib/middleware';
+import { verifyToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     console.log('Text analysis request by user:', user.userId);
 
     // Get query parameters for filtering
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
-    const periodId = searchParams.get('periodId');
     const regionId = searchParams.get('regionId');
     const customKeywordsParam = searchParams.get('customKeywords');
-
-    // Build filter conditions
-    const whereConditions: any = {};
-    if (categoryId && categoryId !== 'all') {
-      whereConditions.categoryId = categoryId;
-    }
-    if (regionId && regionId !== 'all') {
-      whereConditions.regionId = regionId;
-    }
-    
-    // Handle date filtering if provided
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    if (startDate || endDate) {
-      whereConditions.createdAt = {};
-      if (startDate) {
-        whereConditions.createdAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereConditions.createdAt.lte = new Date(endDate);
-      }
+
+    // Build Supabase query
+    let query = supabase
+      .from('phenomena')
+      .select(`
+        id,
+        title,
+        description,
+        createdAt,
+        category:survey_categories(id, name, periodeSurvei, startDate, endDate),
+        region:regions(id, city, province, regionCode)
+      `);
+
+    // Apply filters
+    if (categoryId && categoryId !== 'all') {
+      query = query.eq('categoryId', categoryId);
+    }
+    if (regionId && regionId !== 'all') {
+      query = query.eq('regionId', regionId);
+    }
+    if (startDate) {
+      query = query.gte('createdAt', startDate);
+    }
+    if (endDate) {
+      query = query.lte('createdAt', endDate);
     }
 
-    // Get phenomena texts for analysis with optional filtering
-    const phenomena = await prisma.phenomenon.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            id: true,
-            city: true,
-            province: true,
-            regionCode: true,
-          },
-        },
-      },
-    });
+    const { data: phenomena, error } = await query;
+
+    if (error) {
+      console.error('Text analysis fetch error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
+    }
 
     // Simple text analysis functions
     function extractKeywords(text: string): string[] {
@@ -165,7 +163,7 @@ export async function GET(request: NextRequest) {
       proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
     });
 
-    phenomena.forEach(phenomenon => {
+    (phenomena || []).forEach(phenomenon => {
       const combinedText = `${phenomenon.title} ${phenomenon.description}`;
       const words = extractKeywords(combinedText);
       
@@ -176,7 +174,7 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Category-specific keywords
-      const categoryName = phenomenon.category.name;
+      const categoryName = phenomenon.category?.name || 'Unknown';
       if (!categoryKeywords[categoryName]) {
         categoryKeywords[categoryName] = [];
       }
@@ -211,7 +209,9 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average description length
-    const avgDescriptionLength = phenomena.reduce((sum, p) => sum + p.description.length, 0) / phenomena.length;
+    const avgDescriptionLength = phenomena && phenomena.length > 0 
+      ? phenomena.reduce((sum, p) => sum + (p.description?.length || 0), 0) / phenomena.length 
+      : 0;
 
     // Word cloud data (top 50 words for visualization)
     const wordCloudData = Object.entries(wordFrequency)
@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      totalPhenomena: phenomena.length,
+      totalPhenomena: phenomena ? phenomena.length : 0,
       topKeywords,
       sentimentAnalysis: [
         { name: 'Positif', value: sentimentAnalysis.positive },

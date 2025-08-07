@@ -88,7 +88,7 @@ export default function AnalyticsPage() {
       if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
       const url = `/api/analytics/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
       
       if (response.ok) {
         const result = await response.json();
@@ -112,8 +112,8 @@ export default function AnalyticsPage() {
       setError('');
       
       const [overviewRes, textAnalysisRes] = await Promise.all([
-        fetch('/api/analytics/simple-overview'),
-        fetch('/api/analytics/text-analysis'),
+        fetch('/api/analytics/overview', { credentials: 'include' }),
+        fetch('/api/analytics/text-analysis', { credentials: 'include' }),
       ]);
 
       if (overviewRes.ok) {

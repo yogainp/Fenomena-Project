@@ -66,9 +66,10 @@ const MAX_PHENOMENA_LIMIT = 10;
 const MAX_NEWS_PER_PHENOMENON = 10;
 const MAX_SURVEY_NOTES = 5;
 
-// Input validation helper
+// Input validation helper - Updated for Supabase UUID/CUID format
 function isValidObjectId(id: string): boolean {
-  return /^[a-zA-Z0-9]{25}$/.test(id);
+  // Allow UUID format (8-4-4-4-12) or CUID format or any reasonable alphanumeric ID
+  return /^[a-zA-Z0-9\-_]{8,36}$/.test(id) && id.length >= 8;
 }
 
 // Timeout promise helper
@@ -178,10 +179,13 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(MAX_PHENOMENA_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || '5')));
     
     // Input validation
+    console.log('Validating categoryId:', categoryId, 'isValid:', categoryId && categoryId !== 'all' ? isValidObjectId(categoryId) : 'N/A');
+    
     if (categoryId && categoryId !== 'all' && !isValidObjectId(categoryId)) {
+      console.error('Invalid category ID format:', categoryId);
       return NextResponse.json({ 
         error: 'Invalid category ID format',
-        details: 'Category ID must be a valid identifier'
+        details: `Category ID "${categoryId}" must be a valid identifier`
       }, { status: 400 });
     }
     
@@ -225,13 +229,50 @@ export async function GET(request: NextRequest) {
 
     console.log('Starting insights generation...', { categoryId, regionId, page, limit });
     
+    // Log filter conditions being applied
+    console.log('Filter conditions will be applied:', {
+      categoryId: categoryId !== 'all' ? categoryId : 'NONE',
+      regionId: regionId !== 'all' ? regionId : 'NONE',
+      userRole: user.role,
+      userRegionId: user.regionId
+    });
+    
+    // Build Supabase query for count
+    let countQuery = supabase.from('phenomena').select('*', { count: 'exact', head: true });
+    
+    // Apply filters to count query
+    if (categoryId && categoryId !== 'all') {
+      countQuery = countQuery.eq('categoryId', categoryId);
+    }
+    if (regionId && regionId !== 'all') {
+      countQuery = countQuery.eq('regionId', regionId);
+    }
+    if (phenomenonId) {
+      countQuery = countQuery.eq('id', phenomenonId);
+    }
+    
+    // Apply role-based data filtering for count
+    if (user.role !== 'ADMIN') {
+      if (user.regionId) {
+        countQuery = countQuery.eq('regionId', user.regionId);
+      } else {
+        countQuery = countQuery.eq('userId', user.userId);
+      }
+    }
+
     // Get total count for pagination
-    totalCount = await Promise.race([
-      prisma.phenomenon.count({ where: whereConditions }),
+    const { count: totalCount, error: countError } = await Promise.race([
+      countQuery,
       createTimeoutPromise(10000) // 10 second timeout for count query
     ]);
+
+    if (countError) {
+      console.error('Error getting phenomenon count:', countError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
     
-    if (totalCount === 0) {
+    
+    if (!totalCount || totalCount === 0) {
       return NextResponse.json({
         insights: [],
         summary: {
@@ -254,21 +295,98 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
     const totalPages = Math.ceil(totalCount / limit);
     
+    // Build Supabase query for phenomena (without joins to avoid issues)
+    let phenomenaQuery = supabase
+      .from('phenomena')
+      .select('id, title, description, createdAt, categoryId, regionId, userId');
+
+    // Apply filters to phenomena query
+    if (categoryId && categoryId !== 'all') {
+      phenomenaQuery = phenomenaQuery.eq('categoryId', categoryId);
+    }
+    if (regionId && regionId !== 'all') {
+      phenomenaQuery = phenomenaQuery.eq('regionId', regionId);
+    }
+    if (phenomenonId) {
+      phenomenaQuery = phenomenaQuery.eq('id', phenomenonId);
+    }
+    
+    // Apply role-based data filtering
+    if (user.role !== 'ADMIN') {
+      if (user.regionId) {
+        phenomenaQuery = phenomenaQuery.eq('regionId', user.regionId);
+      } else {
+        phenomenaQuery = phenomenaQuery.eq('userId', user.userId);
+      }
+    }
+
+    // Apply ordering and pagination
+    phenomenaQuery = phenomenaQuery
+      .order('createdAt', { ascending: false })
+      .range(phenomenonId ? 0 : offset, phenomenonId ? 0 : offset + limit - 1);
+
     // Get phenomena with related data (with pagination)
-    phenomena = await Promise.race([
-      prisma.phenomenon.findMany({
-        where: whereConditions,
-        include: {
-          category: true,
-          region: true,
-          user: { select: { id: true, username: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: phenomenonId ? 1 : limit,
-        skip: phenomenonId ? 0 : offset,
-      }),
+    const { data: phenomenaData, error: phenomenaError } = await Promise.race([
+      phenomenaQuery,
       createTimeoutPromise(15000) // 15 second timeout for main query
     ]);
+
+    if (phenomenaError) {
+      console.error('Error fetching phenomena:', phenomenaError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+
+    // Get related data separately to avoid join issues
+    const categoryIds = [...new Set(phenomenaData?.map(p => p.categoryId))];
+    const regionIds = [...new Set(phenomenaData?.map(p => p.regionId))];
+    const userIds = [...new Set(phenomenaData?.map(p => p.userId))];
+
+
+    const [
+      { data: categoriesData, error: catError },
+      { data: regionsData, error: regError },
+      { data: usersData, error: userError }
+    ] = await Promise.all([
+      supabase.from('survey_categories').select('id, name, startDate, endDate').in('id', categoryIds),
+      supabase.from('regions').select('id, city, province').in('id', regionIds),
+      supabase.from('users').select('id, username').in('id', userIds)
+    ]);
+
+    if (catError) console.error('Error fetching categories:', catError);
+    if (regError) console.error('Error fetching regions:', regError);
+    if (userError) console.error('Error fetching users:', userError);
+
+    // Create lookup maps
+    const categoriesMap = new Map((categoriesData || []).map(c => [c.id, c]));
+    const regionsMap = new Map((regionsData || []).map(r => [r.id, r]));
+    const usersMap = new Map((usersData || []).map(u => [u.id, u]));
+
+    // Transform data to match expected format
+    phenomena = (phenomenaData || []).map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      createdAt: new Date(p.createdAt),
+      categoryId: p.categoryId,
+      regionId: p.regionId,
+      userId: p.userId,
+      category: {
+        id: categoriesMap.get(p.categoryId)?.id,
+        name: categoriesMap.get(p.categoryId)?.name,
+        startDate: categoriesMap.get(p.categoryId)?.startDate ? new Date(categoriesMap.get(p.categoryId).startDate) : undefined,
+        endDate: categoriesMap.get(p.categoryId)?.endDate ? new Date(categoriesMap.get(p.categoryId).endDate) : undefined,
+      },
+      region: {
+        id: regionsMap.get(p.regionId)?.id,
+        city: regionsMap.get(p.regionId)?.city,
+        province: regionsMap.get(p.regionId)?.province,
+      },
+      user: {
+        id: usersMap.get(p.userId)?.id,
+        username: usersMap.get(p.userId)?.username,
+      },
+    }));
 
     if (phenomena.length === 0) {
       return NextResponse.json({
@@ -289,89 +407,112 @@ export async function GET(request: NextRequest) {
           const phenomenonSentiment = getSentimentScore(combinedText);
 
           // Find correlated news based on keywords (with timeout and limits)
-          const potentialNews = await Promise.race([
-            prisma.scrappingBerita.findMany({
-              where: {
-                tanggalBerita: {
-                  gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // Last 90 days only for performance
-                },
-                OR: [
-                  {
-                    matchedKeywords: {
-                      hasSome: phenomenonKeywords,
-                    },
-                  },
-                  {
-                    judul: {
-                      contains: phenomenon.title.split(' ')[0], // First word of title
-                      mode: 'insensitive',
-                    },
-                  },
-                ],
-              },
-              orderBy: { tanggalBerita: 'desc' },
-              take: MAX_NEWS_PER_PHENOMENON, // Reduced from 20 to 10
-            }),
-            createTimeoutPromise(10000) // 10 second timeout for news query
-          ]);
+          const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+          const firstWordOfTitle = phenomenon.title.split(' ')[0];
+          
+          
+          let potentialNews = [];
+          let newsError = null;
+          
+          try {
+            const newsResult = await Promise.race([
+              supabase
+                .from('scrapping_berita')
+                .select('id, judul, isi, portalBerita, linkBerita, tanggalBerita, matchedKeywords')
+                .gte('tanggalBerita', ninetyDaysAgo.toISOString())
+                .ilike('judul', `%${firstWordOfTitle}%`) // Simplified query to avoid complex OR syntax
+                .order('tanggalBerita', { ascending: false })
+                .limit(MAX_NEWS_PER_PHENOMENON),
+              createTimeoutPromise(10000) // 10 second timeout for news query
+            ]);
+            potentialNews = newsResult.data || [];
+            newsError = newsResult.error;
+          } catch (error) {
+            console.error(`Error fetching news for phenomenon ${phenomenon.id}:`, error);
+            newsError = error;
+          }
+
+          if (newsError) {
+            console.error('Error fetching news:', newsError);
+            // Continue with empty news array if there's an error
+          }
 
           // Find related survey notes (with timeout and limits)
-          const surveyNotes = await Promise.race([
-            prisma.catatanSurvei.findMany({
-              where: {
-                categoryId: phenomenon.categoryId,
-                regionId: phenomenon.regionId,
-              },
-              orderBy: { createdAt: 'desc' },
-              take: MAX_SURVEY_NOTES, // Reduced from 10 to 5
-            }),
-            createTimeoutPromise(8000) // 8 second timeout for survey query
-          ]);
+          let surveyNotes = [];
+          let surveyError = null;
+          
+          try {
+            const surveyResult = await Promise.race([
+              supabase
+                .from('catatan_survei')
+                .select('id, catatan')
+                .eq('categoryId', phenomenon.categoryId)
+                .eq('regionId', phenomenon.regionId)
+                .order('createdAt', { ascending: false })
+                .limit(MAX_SURVEY_NOTES),
+              createTimeoutPromise(8000) // 8 second timeout for survey query
+            ]);
+            surveyNotes = surveyResult.data || [];
+            surveyError = surveyResult.error;
+          } catch (error) {
+            console.error(`Error fetching survey notes for phenomenon ${phenomenon.id}:`, error);
+            surveyError = error;
+          }
+
+          if (surveyError) {
+            console.error('Error fetching survey notes:', surveyError);
+            // Continue with empty survey notes array if there's an error
+          }
 
           // Calculate correlation for each news item
-          const correlatedNews = potentialNews.map(news => {
-            const newsKeywords = extractKeywords(`${news.judul} ${news.isi}`);
-            const keywordOverlap = calculateKeywordOverlap(phenomenonKeywords, newsKeywords);
-            const temporalRelevance = calculateTemporalRelevance(
-              phenomenon.createdAt,
-              news.tanggalBerita,
-              phenomenon.category
-            );
-            
-            const newsSentiment = getSentimentScore(`${news.judul} ${news.isi}`);
-            const sentimentMatch = newsSentiment === phenomenonSentiment ? 100 : 
-                                  (newsSentiment === 'neutral' || phenomenonSentiment === 'neutral') ? 50 : 0;
+          const correlatedNews = (potentialNews || []).map(news => {
+            try {
+              const newsKeywords = extractKeywords(`${news.judul} ${news.isi || ''}`);
+              const keywordOverlap = calculateKeywordOverlap(phenomenonKeywords, newsKeywords);
+              const temporalRelevance = calculateTemporalRelevance(
+                phenomenon.createdAt,
+                new Date(news.tanggalBerita),
+                phenomenon.category
+              );
+              
+              const newsSentiment = getSentimentScore(`${news.judul} ${news.isi || ''}`);
+              const sentimentMatch = newsSentiment === phenomenonSentiment ? 100 : 
+                                    (newsSentiment === 'neutral' || phenomenonSentiment === 'neutral') ? 50 : 0;
 
-            const correlationData: CorrelationData = {
-              keywordOverlap,
-              temporalRelevance,
-              geographicRelevance: 75, // Simplified - could be enhanced with location analysis
-              sentimentMatch,
-            };
+              const correlationData: CorrelationData = {
+                keywordOverlap,
+                temporalRelevance,
+                geographicRelevance: 75, // Simplified - could be enhanced with location analysis
+                sentimentMatch,
+              };
 
-            const relevanceScore = (
-              keywordOverlap * 0.4 +
-              temporalRelevance * 0.3 +
-              correlationData.geographicRelevance * 0.2 +
-              sentimentMatch * 0.1
-            );
+              const relevanceScore = (
+                keywordOverlap * 0.4 +
+                temporalRelevance * 0.3 +
+                correlationData.geographicRelevance * 0.2 +
+                sentimentMatch * 0.1
+              );
 
-            return {
-              id: news.id,
-              judul: news.judul,
-              portalBerita: news.portalBerita,
-              linkBerita: news.linkBerita,
-              tanggalBerita: news.tanggalBerita,
-              matchedKeywords: news.matchedKeywords,
-              correlationData,
-              relevanceScore: Math.round(relevanceScore),
-            };
-          }).filter(news => news.relevanceScore > 20) // Filter out low relevance news
+              return {
+                id: news.id,
+                judul: news.judul,
+                portalBerita: news.portalBerita,
+                linkBerita: news.linkBerita,
+                tanggalBerita: news.tanggalBerita,
+                matchedKeywords: news.matchedKeywords,
+                correlationData,
+                relevanceScore: Math.round(relevanceScore),
+              };
+            } catch (error) {
+              console.error(`Error processing news item ${news.id}:`, error);
+              return null;
+            }
+          }).filter(news => news && news.relevanceScore > 20) // Filter out null items and low relevance news
             .sort((a, b) => b.relevanceScore - a.relevanceScore)
             .slice(0, 5); // Top 5 most relevant news
 
           // Analyze survey notes
-          const analyzedSurveyNotes = surveyNotes.map(note => {
+          const analyzedSurveyNotes = (surveyNotes || []).map(note => {
             const noteKeywords = extractKeywords(note.catatan);
             const sentiment = getSentimentScore(note.catatan);
             const relevanceScore = calculateKeywordOverlap(phenomenonKeywords, noteKeywords);
@@ -531,14 +672,19 @@ export async function GET(request: NextRequest) {
     let savedInsights = 0;
     for (const insight of insights) {
       try {
-        await prisma.analysisResult.create({
-          data: {
+        const { error: saveError } = await supabase
+          .from('analysis_results')
+          .insert({
             analysisType: 'FENOMENA_INSIGHTS',
             results: insight,
             phenomenonId: insight.phenomenonId,
-          },
-        });
-        savedInsights++;
+          });
+        
+        if (!saveError) {
+          savedInsights++;
+        } else {
+          console.error(`Failed to save insight for phenomenon ${insight.phenomenonId}:`, saveError);
+        }
       } catch (error) {
         console.error(`Failed to save insight for phenomenon ${insight.phenomenonId}:`, error);
         // Continue processing other insights even if one fails to save

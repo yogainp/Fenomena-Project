@@ -1,11 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { requireRole } from '@/lib/middleware';
+import { verifyToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Check Existing API Called ===');
-    const user = requireRole(request, 'ADMIN');
+    
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     console.log('User authenticated:', user);
     const body = await request.json();
     console.log('Request body:', body);
@@ -22,12 +39,15 @@ export async function POST(request: NextRequest) {
     
     // Validate category exists
     console.log('Finding category with ID:', categoryId);
-    const category = await prisma.surveyCategory.findUnique({
-      where: { id: categoryId },
-    });
+    const { data: category, error: categoryError } = await supabase
+      .from('survey_categories')
+      .select('id, name')
+      .eq('id', categoryId)
+      .single();
+      
     console.log('Category found:', category);
     
-    if (!category) {
+    if (categoryError || !category) {
       console.log('Category not found for ID:', categoryId);
       return NextResponse.json(
         { error: 'Kategori tidak ditemukan' },
@@ -35,70 +55,65 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    
-    // Check existing data
-    const existingData = await prisma.catatanSurvei.findMany({
-      where: {
-        categoryId,
-      },
-      include: {
-        user: {
-          select: {
-            username: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 1, // Get the most recent record to show who uploaded last
+    // Check existing data - get most recent record
+    const { data: existingData, error: existingError } = await supabase
+      .from('catatan_survei')
+      .select(`
+        id,
+        createdAt,
+        user:users(username)
+      `)
+      .eq('categoryId', categoryId)
+      .order('createdAt', { ascending: false })
+      .limit(1);
+
+    // Get count of existing data
+    const { count: existingCount, error: countError } = await supabase
+      .from('catatan_survei')
+      .select('*', { count: 'exact', head: true })
+      .eq('categoryId', categoryId);
+
+    if (existingError || countError) {
+      console.error('Error fetching existing data:', existingError || countError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get regions distribution using aggregation
+    const { data: regionStats, error: regionError } = await supabase
+      .from('catatan_survei')
+      .select(`
+        regionId,
+        region:regions(id, province, city)
+      `)
+      .eq('categoryId', categoryId);
+
+    if (regionError) {
+      console.error('Error fetching region distribution:', regionError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Process region stats manually since Supabase doesn't have groupBy
+    const regionMap = new Map();
+    (regionStats || []).forEach(item => {
+      const regionId = item.regionId;
+      if (!regionMap.has(regionId)) {
+        regionMap.set(regionId, {
+          region: item.region,
+          count: 0
+        });
+      }
+      regionMap.get(regionId).count++;
     });
-    
-    const existingCount = await prisma.catatanSurvei.count({
-      where: {
-        categoryId,
-      },
-    });
-    
-    // Get regions distribution
-    const regionDistribution = await prisma.catatanSurvei.groupBy({
-      by: ['regionId'],
-      where: {
-        categoryId,
-      },
-      _count: {
-        id: true,
-      },
-    });
-    
-    // Get region details for the distribution
-    const regionIds = regionDistribution.map(r => r.regionId);
-    const regions = await prisma.region.findMany({
-      where: {
-        id: {
-          in: regionIds,
-        },
-      },
-      select: {
-        id: true,
-        province: true,
-        city: true,
-      },
-    });
-    
-    const regionMap = new Map(regions.map(r => [r.id, r]));
-    const regionStats = regionDistribution.map(r => ({
-      region: regionMap.get(r.regionId),
-      count: r._count.id,
-    }));
+
+    const processedRegionStats = Array.from(regionMap.values());
     
     return NextResponse.json({
-      hasExistingData: existingCount > 0,
-      existingCount,
-      lastUploadedBy: existingData[0]?.user.username || null,
-      lastUploadedAt: existingData[0]?.createdAt || null,
+      hasExistingData: (existingCount || 0) > 0,
+      existingCount: existingCount || 0,
+      lastUploadedBy: existingData?.[0]?.user?.username || null,
+      lastUploadedAt: existingData?.[0]?.createdAt || null,
       categoryName: category.name,
-      regionStats,
+      regionStats: processedRegionStats,
     });
     
   } catch (error: any) {

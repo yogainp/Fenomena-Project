@@ -46,7 +46,7 @@ export async function incrementKeywordMatchCount(keywords: string[]) {
       // Update with incremented count
       return supabase
         .from('scrapping_keywords')
-        .update({ matchCount: (current.matchCount || 0) + 1 })
+        .update({ matchCount: ((current.matchCount as number) || 0) + 1 })
         .eq('keyword', keyword);
     }
   });

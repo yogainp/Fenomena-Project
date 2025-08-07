@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
-import { requireAuth } from '@/lib/middleware';
+import { verifyToken } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 const phenomenonSchema = z.object({
@@ -13,7 +13,18 @@ const phenomenonSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const categoryId = url.searchParams.get('categoryId');
     const periodId = url.searchParams.get('periodId');
@@ -26,108 +37,64 @@ export async function GET(request: NextRequest) {
     const format = url.searchParams.get('format') || 'json';
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
     const context = url.searchParams.get('context'); // 'management' for /phenomena page
 
-    const whereClause: any = {};
+    // Build Supabase query
+    let query = supabase
+      .from('phenomena')
+      .select(`
+        *,
+        user:users(username),
+        category:survey_categories(name, periodeSurvei, startDate, endDate),
+        region:regions(province, city, regionCode)
+      `, { count: 'exact' });
 
     // For non-admin users in management context, restrict to their assigned region
     if (user.role !== 'ADMIN' && context === 'management') {
       if (!user.regionId) {
         return NextResponse.json({ error: 'User not assigned to any region' }, { status: 403 });
       }
-      whereClause.regionId = user.regionId;
+      query = query.eq('regionId', user.regionId);
     }
 
-    // Filter by category if provided
+    // Apply filters
     if (categoryId) {
-      whereClause.categoryId = categoryId;
+      query = query.eq('categoryId', categoryId);
     }
 
-    // Filter by period if provided (backward compatibility)
-    if (periodId) {
-      whereClause.periodId = periodId;
-    }
-
-    // Filter by date range using category's startDate and endDate
-    if (startDate || endDate) {
-      whereClause.category = {
-        AND: []
-      };
-      
-      if (startDate) {
-        whereClause.category.AND.push({
-          startDate: {
-            gte: new Date(startDate)
-          }
-        });
-      }
-      
-      if (endDate) {
-        whereClause.category.AND.push({
-          endDate: {
-            lte: new Date(endDate)
-          }
-        });
-      }
-    }
-
-    // Filter by region if provided
     if (regionId) {
-      whereClause.regionId = regionId;
+      query = query.eq('regionId', regionId);
     }
 
-    // Search in title and description if provided
     if (search) {
-      whereClause.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
     // If only count is requested
     if (count && !download) {
-      const total = await prisma.phenomenon.count({
-        where: whereClause,
-      });
-      return NextResponse.json({ count: total });
+      const { count: total, error } = await query;
+      if (error) {
+        console.error('Count error:', error);
+        return NextResponse.json({ error: 'Database error' }, { status: 500 });
+      }
+      return NextResponse.json({ count: total || 0 });
     }
 
-    // Get total count for pagination
-    const total = await prisma.phenomenon.count({
-      where: whereClause,
-    });
+    // Apply pagination and ordering
+    query = query
+      .order('createdAt', { ascending: false })
+      .range(offset, offset + (download ? 9999 : limit - 1));
 
-    const phenomena = await prisma.phenomenon.findMany({
-      where: whereClause,
-      include: {
-        user: {
-          select: {
-            username: true,
-          },
-        },
-        category: {
-          select: {
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: download ? 10000 : limit,
-      skip: download ? 0 : skip,
-    });
+    const { data: phenomena, count: total, error } = await query;
+
+    if (error) {
+      console.error('Phenomena fetch error:', error);
+      return NextResponse.json({ 
+        error: 'Database error', 
+        details: error.message 
+      }, { status: 500 });
+    }
 
     // Handle download formats
     if (download) {
@@ -137,17 +104,17 @@ export async function GET(request: NextRequest) {
       let data: string;
 
       // Transform data for export
-      const exportData = phenomena.map(p => ({
+      const exportData = (phenomena || []).map(p => ({
         id: p.id,
         title: p.title,
         description: p.description,
-        category: p.category.name,
-        period: p.category.periodeSurvei || 'N/A',
+        category: p.category?.name || 'N/A',
+        period: p.category?.periodeSurvei || 'N/A',
         region: p.region?.city || '',
         province: p.region?.province || '',
         city: p.region?.city || '',
         regionCode: p.region?.regionCode || '',
-        author: p.user.username,
+        author: p.user?.username || 'Unknown',
         createdAt: p.createdAt,
       }));
 
@@ -226,13 +193,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Return paginated response
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil((total || 0) / limit);
     return NextResponse.json({
-      phenomena,
+      phenomena: phenomena || [],
       pagination: {
         page,
         limit,
-        total,
+        total: total || 0,
         totalPages,
         hasNext: page < totalPages,
         hasPrev: page > 1,

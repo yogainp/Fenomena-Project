@@ -11,18 +11,18 @@ export async function PATCH(
     requireRole(request, 'ADMIN');
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        isVerified: true,
-      },
-    });
+    const { data: existingUser, error: existsError } = await supabase
+      .from('users')
+      .select('id, username, email, isVerified')
+      .eq('id', params.id)
+      .single();
 
-    if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (existsError) {
+      if (existsError.code === 'PGRST116') {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      console.error('Error checking user exists:', existsError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
     if (existingUser.isVerified) {
@@ -30,20 +30,21 @@ export async function PATCH(
     }
 
     // Approve user
-    const updatedUser = await prisma.user.update({
-      where: { id: params.id },
-      data: {
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({
         isVerified: true,
-        verifiedAt: new Date(),
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        isVerified: true,
-        verifiedAt: true,
-      },
-    });
+        verifiedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', params.id)
+      .select('id, email, username, isVerified, verifiedAt')
+      .single();
+
+    if (updateError) {
+      console.error('Error approving user:', updateError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: 'User approved successfully',

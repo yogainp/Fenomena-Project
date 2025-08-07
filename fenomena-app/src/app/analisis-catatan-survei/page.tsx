@@ -74,8 +74,8 @@ export default function AnalisisCatatanSurveiPage() {
   const fetchInitialData = async () => {
     try {
       const [categoriesRes, regionsRes] = await Promise.all([
-        fetch('/api/categories'),
-        fetch('/api/regions'),
+        fetch('/api/categories', { credentials: 'include' }),
+        fetch('/api/regions', { credentials: 'include' }),
       ]);
 
       if (categoriesRes.ok) {
@@ -108,7 +108,9 @@ export default function AnalisisCatatanSurveiPage() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
-      const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`);
+      const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`, {
+        credentials: 'include'
+      });
       
       if (response.ok) {
         const data = await response.json();

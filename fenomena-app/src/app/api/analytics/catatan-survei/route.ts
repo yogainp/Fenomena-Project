@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { requireAuth } from '@/lib/middleware';
+import { verifyToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     // Get query parameters for filtering
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
@@ -13,70 +24,52 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const customKeywordsParam = searchParams.get('customKeywords');
 
-    // Build filter conditions
-    const whereConditions: any = {};
+    // Build Supabase query
+    let query = supabase
+      .from('catatan_survei')
+      .select(`
+        id,
+        catatan,
+        createdAt,
+        category:survey_categories(id, name),
+        region:regions(id, province, city, regionCode),
+        user:users(id, username)
+      `);
+
+    // Apply filters
     if (categoryId && categoryId !== 'all') {
-      whereConditions.categoryId = categoryId;
+      query = query.eq('categoryId', categoryId);
     }
     if (regionId && regionId !== 'all') {
-      whereConditions.regionId = regionId;
+      query = query.eq('regionId', regionId);
     }
-    if (startDate || endDate) {
-      whereConditions.createdAt = {};
-      if (startDate) {
-        whereConditions.createdAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereConditions.createdAt.lte = new Date(endDate + 'T23:59:59.999Z');
-      }
+    if (startDate) {
+      query = query.gte('createdAt', startDate);
+    }
+    if (endDate) {
+      query = query.lte('createdAt', endDate + 'T23:59:59.999Z');
     }
 
     // Apply role-based data filtering
     if (user.role !== 'ADMIN') {
       if (user.regionId) {
         // Regional user can see data from their region
-        // If no region filter is specified or it's 'all', use user's region
-        if (!whereConditions.regionId) {
-          whereConditions.regionId = user.regionId;
-        } else if (whereConditions.regionId !== user.regionId) {
-          // If user tries to access different region, restrict to their region
-          whereConditions.regionId = user.regionId;
-        }
+        query = query.eq('regionId', user.regionId);
       } else {
         // Regular user can only see their own data
-        whereConditions.userId = user.userId;
+        query = query.eq('userId', user.userId);
       }
     }
 
-    // Get catatan survei texts for analysis with optional filtering
-    const catatanSurvei = await prisma.catatanSurvei.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        catatan: true,
-        createdAt: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            username: true,
-          },
-        },
-      },
-    });
+    const { data: catatanSurvei, error } = await query;
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
+    }
 
     // Simple text analysis functions (same as phenomena analysis)
     function extractKeywords(text: string): string[] {
@@ -180,7 +173,7 @@ export async function GET(request: NextRequest) {
       proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
     });
 
-    catatanSurvei.forEach(catatan => {
+    (catatanSurvei || []).forEach(catatan => {
       const words = extractKeywords(catatan.catatan);
       
       allWords = allWords.concat(words);
@@ -190,14 +183,14 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Category-specific keywords
-      const categoryName = catatan.category.name;
+      const categoryName = catatan.category?.name || 'Unknown';
       if (!categoryKeywords[categoryName]) {
         categoryKeywords[categoryName] = [];
       }
       categoryKeywords[categoryName] = categoryKeywords[categoryName].concat(words);
       
       // Region-specific keywords
-      const regionName = `${catatan.region.city}, ${catatan.region.province}`;
+      const regionName = `${catatan.region?.city || 'Unknown'}, ${catatan.region?.province || 'Unknown'}`;
       if (!regionKeywords[regionName]) {
         regionKeywords[regionName] = [];
       }
@@ -244,8 +237,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average note length
-    const avgNoteLength = catatanSurvei.length > 0 
-      ? catatanSurvei.reduce((sum, c) => sum + c.catatan.length, 0) / catatanSurvei.length 
+    const avgNoteLength = catatanSurvei && catatanSurvei.length > 0 
+      ? catatanSurvei.reduce((sum, c) => sum + (c.catatan?.length || 0), 0) / catatanSurvei.length 
       : 0;
 
     // Word cloud data (top 50 words for visualization)
@@ -271,7 +264,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      totalCatatanSurvei: catatanSurvei.length,
+      totalCatatanSurvei: catatanSurvei ? catatanSurvei.length : 0,
       topKeywords,
       sentimentAnalysis: [
         { name: 'Positif', value: sentimentAnalysis.positive },

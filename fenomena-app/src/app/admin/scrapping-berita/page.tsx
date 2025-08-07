@@ -138,10 +138,10 @@ export default function ScrappingBeritaPage() {
       setScrapingResult(data.result);
       
       if (data.result.success) {
-        setSuccessMessage(`Scraping completed successfully! Found ${data.result.newItems} new articles.`);
+        setSuccessMessage(`Scraping completed successfully! Found ${data.result.newItems || 0} new articles.`);
         fetchStatistics(); // Refresh statistics
       } else {
-        setError(`Scraping completed with errors: ${data.result.errors.join(', ')}`);
+        setError(`Scraping completed with errors: ${(data.result.errors || []).join(', ')}`);
       }
       
     } catch (err: unknown) {
@@ -398,23 +398,31 @@ export default function ScrappingBeritaPage() {
                 recentActivity.map((item) => (
                   <div key={item.id} className="border-b border-gray-200 pb-4 last:border-b-0">
                     <h4 className="text-sm font-medium text-gray-900 mb-1">
-                      {item.judul.length > 60 ? `${item.judul.substring(0, 60)}...` : item.judul}
+                      {(item.judul || '').length > 60 ? `${(item.judul || '').substring(0, 60)}...` : (item.judul || 'No title')}
                     </h4>
                     <p className="text-xs text-gray-500 mb-2">
-                      {item.portalBerita} • {new Date(item.tanggalScrap).toLocaleDateString()}
+                      {item.portalBerita || 'Unknown source'} • {item.tanggalScrap ? new Date(item.tanggalScrap).toLocaleDateString() : 'Unknown date'}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {item.matchedKeywords.slice(0, 3).map((keyword, index) => (
-                        <span 
-                          key={index}
-                          className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                      {item.matchedKeywords.length > 3 && (
-                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
-                          +{item.matchedKeywords.length - 3} more
+                      {Array.isArray(item.matchedKeywords) && item.matchedKeywords.length > 0 ? (
+                        <>
+                          {item.matchedKeywords.slice(0, 3).map((keyword, index) => (
+                            <span 
+                              key={index}
+                              className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                          {item.matchedKeywords.length > 3 && (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
+                              +{item.matchedKeywords.length - 3} more
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-500 rounded">
+                          No keywords
                         </span>
                       )}
                     </div>
@@ -449,16 +457,16 @@ export default function ScrappingBeritaPage() {
                 <div className="text-sm text-yellow-800">Duplicates</div>
               </div>
               <div className="text-center p-4 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">{scrapingResult.errors.length}</div>
+                <div className="text-2xl font-bold text-red-600">{(scrapingResult.errors || []).length}</div>
                 <div className="text-sm text-red-800">Errors</div>
               </div>
             </div>
 
-            {scrapingResult.errors.length > 0 && (
+            {(scrapingResult.errors || []).length > 0 && (
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Errors:</h4>
                 <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-                  {scrapingResult.errors.map((error, index) => (
+                  {(scrapingResult.errors || []).map((error, index) => (
                     <li key={index}>{error}</li>
                   ))}
                 </ul>

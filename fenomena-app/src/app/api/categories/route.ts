@@ -1,30 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { requireAuth } from '@/lib/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    // Optional auth - allow access even without authentication
-    // This is for public pages like insight-fenomena
-    try {
-      requireAuth(request);
-    } catch (authError) {
-      // Continue without auth for public access
-      console.log('No auth provided, allowing public access to categories');
+    // Public access - no auth required
+    const { data: categories, error } = await supabase
+      .from('survey_categories')
+      .select('id, name, description')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Categories fetch error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
     }
 
-    const categories = await prisma.surveyCategory.findMany({
-      select: {
-        id: true,
-        name: true,
-        description: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
-
-    return NextResponse.json(categories);
+    return NextResponse.json(categories || []);
   } catch (error: any) {
     console.error('Get categories error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

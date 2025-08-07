@@ -27,71 +27,82 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where conditions
-    const whereConditions: any = {};
-    
+    // Build Supabase query
+    let query = supabase
+      .from('users')
+      .select(`
+        id,
+        email,
+        username,
+        role,
+        regionId,
+        isVerified,
+        verifiedAt,
+        createdAt,
+        updatedAt,
+        regions:regionId (
+          id,
+          province,
+          city,
+          regionCode
+        )
+      `, { count: 'exact' });
+
+    // Apply filters
     if (search) {
-      whereConditions.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { username: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`email.ilike.%${search}%,username.ilike.%${search}%`);
     }
 
     if (roleFilter && (roleFilter === 'ADMIN' || roleFilter === 'USER')) {
-      whereConditions.role = roleFilter;
+      query = query.eq('role', roleFilter);
     }
 
     if (verificationFilter) {
-      whereConditions.isVerified = verificationFilter === 'verified';
+      query = query.eq('isVerified', verificationFilter === 'verified');
     }
 
-    // Get users with pagination
-    const [users, totalUsers] = await Promise.all([
-      prisma.user.findMany({
-        where: whereConditions,
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          role: true,
-          regionId: true,
-          region: {
-            select: {
-              id: true,
-              province: true,
-              city: true,
-              regionCode: true,
-            },
-          },
-          isVerified: true,
-          verifiedAt: true,
-          createdAt: true,
-          updatedAt: true,
-          _count: {
-            select: {
-              phenomena: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.user.count({ where: whereConditions }),
-    ]);
+    // Apply pagination and ordering
+    const offset = (page - 1) * limit;
+    query = query
+      .order('createdAt', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    const totalPages = Math.ceil(totalUsers / limit);
+    const { data: usersData, count: totalUsers, error: usersError } = await query;
+
+    if (usersError) {
+      console.error('Error fetching users:', usersError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get phenomena count for each user manually
+    const usersWithCounts = await Promise.all(
+      (usersData || []).map(async (user: any) => {
+        const { count: phenomenaCount, error: countError } = await supabase
+          .from('phenomena')
+          .select('*', { count: 'exact', head: true })
+          .eq('userId', user.id);
+
+        if (countError) {
+          console.error('Error counting phenomena for user:', user.id, countError);
+        }
+
+        return {
+          ...user,
+          region: user.regions,
+          regions: undefined, // Remove the nested object
+          phenomenaCount: phenomenaCount || 0,
+        };
+      })
+    );
+
+    const totalPages = Math.ceil((totalUsers || 0) / limit);
 
     return NextResponse.json({
-      users: users.map(user => ({
-        ...user,
-        phenomenaCount: user._count.phenomena,
-        _count: undefined,
-      })),
+      users: usersWithCounts,
       pagination: {
         currentPage: page,
         totalPages,
-        totalUsers,
+        totalUsers: totalUsers || 0,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
@@ -124,14 +135,16 @@ export async function POST(request: NextRequest) {
     const { email, username, password, role, regionId, isVerified } = validationResult.data;
 
     // Check if email or username already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { username },
-        ],
-      },
-    });
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id, email, username')
+      .or(`email.eq.${email},username.eq.${username}`)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('Error checking existing user:', checkError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (existingUser) {
       return NextResponse.json({

@@ -18,11 +18,13 @@ export async function GET(
   try {
     requireRole(request, 'ADMIN');
 
-    const keyword = await prisma.scrappingKeyword.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!keyword) {
+    const { data: keyword, error } = await supabase
+      .from('scrapping_keywords')
+      .select('*')
+      .eq('id', params.id)
+      .single();
+      
+    if (error || !keyword) {
       return NextResponse.json({ error: 'Keyword not found' }, { status: 404 });
     }
 
@@ -58,19 +60,23 @@ export async function PUT(
     const updates = validationResult.data;
 
     // Check if keyword exists
-    const existingKeyword = await prisma.scrappingKeyword.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!existingKeyword) {
+    const { data: existingKeyword, error: findError } = await supabase
+      .from('scrapping_keywords')
+      .select('*')
+      .eq('id', params.id)
+      .single();
+      
+    if (findError || !existingKeyword) {
       return NextResponse.json({ error: 'Keyword not found' }, { status: 404 });
     }
 
     // If updating keyword text, check for duplicates
     if (updates.keyword && updates.keyword !== existingKeyword.keyword) {
-      const duplicateKeyword = await prisma.scrappingKeyword.findUnique({
-        where: { keyword: updates.keyword.toLowerCase().trim() },
-      });
+      const { data: duplicateKeyword } = await supabase
+        .from('scrapping_keywords')
+        .select('id')
+        .eq('keyword', updates.keyword.toLowerCase().trim())
+        .single();
 
       if (duplicateKeyword && duplicateKeyword.id !== params.id) {
         return NextResponse.json({
@@ -95,10 +101,20 @@ export async function PUT(
     }
 
     // Update keyword
-    const updatedKeyword = await prisma.scrappingKeyword.update({
-      where: { id: params.id },
-      data: updateData,
-    });
+    const { data: updatedKeyword, error: updateError } = await supabase
+      .from('scrapping_keywords')
+      .update({
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      })
+      .eq('id', params.id)
+      .select()
+      .single();
+      
+    if (updateError) {
+      console.error('Error updating keyword:', updateError);
+      throw updateError;
+    }
 
     return NextResponse.json({
       message: 'Keyword updated successfully',
@@ -123,18 +139,26 @@ export async function DELETE(
     requireRole(request, 'ADMIN');
 
     // Check if keyword exists
-    const existingKeyword = await prisma.scrappingKeyword.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!existingKeyword) {
+    const { data: existingKeyword, error: findError } = await supabase
+      .from('scrapping_keywords')
+      .select('*')
+      .eq('id', params.id)
+      .single();
+      
+    if (findError || !existingKeyword) {
       return NextResponse.json({ error: 'Keyword not found' }, { status: 404 });
     }
 
     // Delete keyword
-    await prisma.scrappingKeyword.delete({
-      where: { id: params.id },
-    });
+    const { error: deleteError } = await supabase
+      .from('scrapping_keywords')
+      .delete()
+      .eq('id', params.id);
+      
+    if (deleteError) {
+      console.error('Error deleting keyword:', deleteError);
+      throw deleteError;
+    }
 
     return NextResponse.json({
       message: 'Keyword deleted successfully',

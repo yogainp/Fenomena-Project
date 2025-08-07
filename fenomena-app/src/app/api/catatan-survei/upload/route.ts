@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { requireRole } from '@/lib/middleware';
+import { verifyToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = requireRole(request, 'ADMIN');
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
     
     const formData = await request.formData();
     const file = formData.get('file') as File;

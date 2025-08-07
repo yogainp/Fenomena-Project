@@ -82,36 +82,44 @@ export async function GET(request: NextRequest) {
     let activeKeywords = 0;
     
     try {
-      totalNews = await prisma.scrappingBerita.count();
+      const { count } = await supabase
+        .from('scrapping_berita')
+        .select('*', { count: 'exact', head: true });
+      totalNews = count || 0;
       console.log('✓ Total news:', totalNews);
     } catch (err) {
       console.error('Error getting total news:', err);
     }
     
     try {
-      todayNews = await prisma.scrappingBerita.count({
-        where: {
-          tanggalScrap: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
-        },
-      });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('scrapping_berita')
+        .select('*', { count: 'exact', head: true })
+        .gte('tanggalScrap', today.toISOString());
+      todayNews = count || 0;
       console.log('✓ Today news:', todayNews);
     } catch (err) {
       console.error('Error getting today news:', err);
     }
     
     try {
-      totalKeywords = await prisma.scrappingKeyword.count();
+      const { count } = await supabase
+        .from('scrapping_keywords')
+        .select('*', { count: 'exact', head: true });
+      totalKeywords = count || 0;
       console.log('✓ Total keywords:', totalKeywords);
     } catch (err) {
       console.error('Error getting total keywords:', err);
     }
     
     try {
-      activeKeywords = await prisma.scrappingKeyword.count({
-        where: { isActive: true },
-      });
+      const { count } = await supabase
+        .from('scrapping_keywords')
+        .select('*', { count: 'exact', head: true })
+        .eq('isActive', true);
+      activeKeywords = count || 0;
       console.log('✓ Active keywords:', activeKeywords);
     } catch (err) {
       console.error('Error getting active keywords:', err);
@@ -120,17 +128,12 @@ export async function GET(request: NextRequest) {
     // Get recent scraping activity
     let recentNews = [];
     try {
-      recentNews = await prisma.scrappingBerita.findMany({
-        select: {
-          id: true,
-          judul: true,
-          portalBerita: true,
-          tanggalScrap: true,
-          matchedKeywords: true,
-        },
-        orderBy: { tanggalScrap: 'desc' },
-        take: 10,
-      });
+      const { data } = await supabase
+        .from('scrapping_berita')
+        .select('id, judul, portalBerita, tanggalScrap, matchedKeywords')
+        .order('tanggalScrap', { ascending: false })
+        .limit(10);
+      recentNews = data || [];
       console.log('✓ Recent news:', recentNews.length);
     } catch (err) {
       console.error('Error getting recent news:', err);

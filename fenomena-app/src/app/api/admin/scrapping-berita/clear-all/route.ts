@@ -9,9 +9,11 @@ export async function DELETE(request: NextRequest) {
     console.log(`Admin ${user.email} is clearing all scraped news`);
 
     // Count total news before deletion for confirmation
-    const totalCount = await prisma.scrappingBerita.count();
+    const { count: totalCount } = await supabase
+      .from('scrapping_berita')
+      .select('*', { count: 'exact', head: true });
     
-    if (totalCount === 0) {
+    if ((totalCount || 0) === 0) {
       return NextResponse.json({ 
         message: 'No news articles to delete',
         deletedCount: 0 
@@ -19,14 +21,22 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete all scraped news articles
-    const deleteResult = await prisma.scrappingBerita.deleteMany({});
+    const { error: deleteError } = await supabase
+      .from('scrapping_berita')
+      .delete()
+      .neq('id', ''); // This will match all records
+      
+    if (deleteError) {
+      console.error('Error deleting all berita:', deleteError);
+      throw deleteError;
+    }
     
-    console.log(`Successfully deleted ${deleteResult.count} news articles`);
+    console.log(`Successfully deleted ${totalCount} news articles`);
 
     return NextResponse.json({
       success: true,
       message: `Successfully deleted all scraped news articles`,
-      deletedCount: deleteResult.count,
+      deletedCount: totalCount,
       totalCount: totalCount
     });
 
