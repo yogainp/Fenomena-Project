@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth';
+import { requireRole } from '@/lib/middleware';
 
 export async function GET(request: NextRequest) {
   try {
@@ -275,7 +276,7 @@ export async function GET(request: NextRequest) {
 // POST /api/analytics/text-analysis - Save analysis results for scrapping berita
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    const user = requireRole(request, 'ADMIN');
     console.log('Save analysis request by user:', user.userId);
 
     const body = await request.json();
@@ -296,50 +297,73 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if scrapping berita exists
-    const scrappingBerita = await prisma.scrappingBerita.findUnique({
-      where: { id: scrappingBeritaId },
-    });
+    const { data: scrappingBerita, error: findError } = await supabase
+      .from('scrapping_berita')
+      .select('id')
+      .eq('id', scrappingBeritaId)
+      .single();
 
-    if (!scrappingBerita) {
+    if (findError || !scrappingBerita) {
       return NextResponse.json({ 
         error: 'Scrapping berita not found' 
       }, { status: 404 });
     }
 
     // Check if analysis already exists for this berita
-    const existingAnalysis = await prisma.analysisResult.findFirst({
-      where: {
-        scrappingBeritaId: scrappingBeritaId,
-        analysisType: analysisType,
-      },
-    });
+    const { data: existingAnalysis, error: existingError } = await supabase
+      .from('analysis_results')
+      .select('id')
+      .eq('scrappingBeritaId', scrappingBeritaId)
+      .eq('analysisType', analysisType)
+      .single();
 
     let analysisResult;
 
-    if (existingAnalysis) {
+    if (existingAnalysis && !existingError) {
       // Update existing analysis
-      analysisResult = await prisma.analysisResult.update({
-        where: { id: existingAnalysis.id },
-        data: {
+      const { data: updatedData, error: updateError } = await supabase
+        .from('analysis_results')
+        .update({
           results: results,
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', existingAnalysis.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating analysis:', updateError);
+        throw new Error('Failed to update analysis');
+      }
+
+      analysisResult = updatedData;
     } else {
       // Create new analysis
-      analysisResult = await prisma.analysisResult.create({
-        data: {
+      const { data: newData, error: createError } = await supabase
+        .from('analysis_results')
+        .insert({
+          id: crypto.randomUUID(),
           analysisType: analysisType,
           results: results,
           scrappingBeritaId: scrappingBeritaId,
-        },
-      });
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating analysis:', createError);
+        throw new Error('Failed to create analysis');
+      }
+
+      analysisResult = newData;
     }
 
     return NextResponse.json({
       message: 'Analysis saved successfully',
       analysisId: analysisResult.id,
-      updated: !!existingAnalysis,
+      updated: !!(existingAnalysis && !existingError),
     });
 
   } catch (error: any) {

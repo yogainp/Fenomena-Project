@@ -49,7 +49,6 @@ export default function KatalogBeritaPage() {
   // Selection states
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [formLoading, setFormLoading] = useState(false);
-  const [clearAllLoading, setClearAllLoading] = useState(false);
 
   useEffect(() => {
     fetchBerita();
@@ -152,42 +151,6 @@ export default function KatalogBeritaPage() {
     }
   };
 
-  const handleClearAll = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete ALL scraped news articles? This action cannot be undone and will permanently remove all news data from the database.'
-    );
-    if (!confirmed) return;
-    
-    const doubleConfirmed = window.confirm(
-      'This is your final warning. Clicking OK will delete ALL scraped news articles. Are you absolutely sure?'
-    );
-    if (!doubleConfirmed) return;
-    
-    try {
-      setClearAllLoading(true);
-      setError('');
-      
-      const response = await makeAuthenticatedRequest('/api/admin/scrapping-berita/clear-all', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to clear all news');
-      }
-      
-      const result = await response.json();
-      setSuccessMessage(`Successfully deleted ${result.deletedCount} news articles`);
-      setSelectedItems([]);
-      fetchBerita();
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setClearAllLoading(false);
-    }
-  };
 
   const handleSingleDelete = async (beritaId: string, beritaTitle: string) => {
     const confirmed = window.confirm(
@@ -273,13 +236,6 @@ export default function KatalogBeritaPage() {
               <h1 className="ml-4 text-xl font-semibold">News Catalog</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={handleClearAll}
-                disabled={clearAllLoading}
-                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
-              >
-                {clearAllLoading ? 'Clearing...' : 'Clear All News'}
-              </button>
               <Link 
                 href="/admin/scrapping-berita"
                 className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"

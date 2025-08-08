@@ -20,12 +20,22 @@ export async function GET(
       return NextResponse.json({ error: 'News not found' }, { status: 404 });
     }
 
-    // TODO: Add analysis results query if needed
-    // For now, just return the berita without analysis results
+    // Get analysis results for this berita
+    const { data: analysisResults, error: analysisError } = await supabase
+      .from('analysis_results')
+      .select('*')
+      .eq('scrappingBeritaId', params.id)
+      .order('createdAt', { ascending: false });
+
+    // If there's an error fetching analysis results, just log it but don't fail the request
+    if (analysisError) {
+      console.warn('Failed to fetch analysis results:', analysisError);
+    }
+
     return NextResponse.json({ 
       berita: {
         ...berita,
-        analysisResults: [] // TODO: Query from analysis_results table if exists
+        analysisResults: analysisResults || []
       }
     });
 

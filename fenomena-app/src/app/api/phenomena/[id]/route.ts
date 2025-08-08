@@ -17,33 +17,21 @@ export async function GET(
   try {
     const user = requireAuth(request);
 
-    const phenomenon = await prisma.phenomenon.findUnique({
-      where: { id: params.id },
-      include: {
-        user: {
-          select: {
-            username: true,
-          },
-        },
-        category: {
-          select: {
-            id: true,
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-      },
-    });
+    const { data: phenomenon, error } = await supabase
+      .from('phenomena')
+      .select(`
+        *,
+        user:users(username),
+        category:survey_categories(id, name, periodeSurvei, startDate, endDate),
+        region:regions(id, province, city, regionCode)
+      `)
+      .eq('id', params.id)
+      .single();
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (!phenomenon) {
       return NextResponse.json({ error: 'Phenomenon not found' }, { status: 404 });
@@ -69,9 +57,16 @@ export async function PUT(
     const body = await request.json();
     const validatedData = phenomenonSchema.parse(body);
 
-    const existingPhenomenon = await prisma.phenomenon.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingPhenomenon, error: fetchError } = await supabase
+      .from('phenomena')
+      .select('*')
+      .eq('id', params.id)
+      .single();
+
+    if (fetchError) {
+      console.error('Supabase error:', fetchError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (!existingPhenomenon) {
       return NextResponse.json({ error: 'Phenomenon not found' }, { status: 404 });
@@ -88,42 +83,50 @@ export async function PUT(
     }
 
     // Verify category exists
-    const category = await prisma.surveyCategory.findUnique({
-      where: { id: validatedData.categoryId },
-    });
-    if (!category) {
+    const { data: category, error: categoryError } = await supabase
+      .from('survey_categories')
+      .select('*')
+      .eq('id', validatedData.categoryId)
+      .single();
+    
+    if (categoryError || !category) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     }
 
     // Verify region exists
-    const region = await prisma.region.findUnique({
-      where: { id: validatedData.regionId },
-    });
-    if (!region) {
+    const { data: region, error: regionError } = await supabase
+      .from('regions')
+      .select('*')
+      .eq('id', validatedData.regionId)
+      .single();
+    
+    if (regionError || !region) {
       return NextResponse.json({ error: 'Region not found' }, { status: 404 });
     }
 
-    const phenomenon = await prisma.phenomenon.update({
-      where: { id: params.id },
-      data: validatedData,
-      include: {
-        category: {
-          select: {
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-      },
-    });
+    // Update the phenomenon
+    const { data: updatedPhenomenon, error: updateError } = await supabase
+      .from('phenomena')
+      .update({
+        title: validatedData.title,
+        description: validatedData.description,
+        categoryId: validatedData.categoryId,
+        regionId: validatedData.regionId,
+      })
+      .eq('id', params.id)
+      .select(`
+        *,
+        category:survey_categories(name, periodeSurvei, startDate, endDate),
+        region:regions(province, city, regionCode)
+      `)
+      .single();
+
+    if (updateError) {
+      console.error('Supabase update error:', updateError);
+      return NextResponse.json({ error: 'Failed to update phenomenon' }, { status: 500 });
+    }
+
+    const phenomenon = updatedPhenomenon;
 
     return NextResponse.json(phenomenon);
   } catch (error: any) {
@@ -148,11 +151,13 @@ export async function DELETE(
   try {
     const user = requireAuth(request);
 
-    const existingPhenomenon = await prisma.phenomenon.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingPhenomenon, error: fetchError } = await supabase
+      .from('phenomena')
+      .select('*')
+      .eq('id', params.id)
+      .single();
 
-    if (!existingPhenomenon) {
+    if (fetchError || !existingPhenomenon) {
       return NextResponse.json({ error: 'Phenomenon not found' }, { status: 404 });
     }
 
@@ -166,9 +171,15 @@ export async function DELETE(
       return NextResponse.json({ error: 'Access denied - region mismatch' }, { status: 403 });
     }
 
-    await prisma.phenomenon.delete({
-      where: { id: params.id },
-    });
+    const { error: deleteError } = await supabase
+      .from('phenomena')
+      .delete()
+      .eq('id', params.id);
+
+    if (deleteError) {
+      console.error('Supabase delete error:', deleteError);
+      return NextResponse.json({ error: 'Failed to delete phenomenon' }, { status: 500 });
+    }
 
     return NextResponse.json({ message: 'Phenomenon deleted successfully' });
   } catch (error: any) {
