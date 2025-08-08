@@ -78,7 +78,7 @@ export async function checkExistingArticle(linkBerita: string, judul: string) {
   const { data, error } = await supabase
     .from('scrapping_berita')
     .select('id')
-    .or(`linkBerita.eq.${linkBerita},judul.eq.${judul}`)
+    .or(`linkBerita.eq."${linkBerita}",judul.eq."${judul}"`)
     .limit(1);
 
   if (error) {

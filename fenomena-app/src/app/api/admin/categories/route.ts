@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     const { data: category, error: createError } = await supabase
       .from('survey_categories')
       .insert({
+        id: crypto.randomUUID(),
         name: validatedData.name,
         description: validatedData.description || null,
         periodeSurvei: validatedData.periodeSurvei || null,

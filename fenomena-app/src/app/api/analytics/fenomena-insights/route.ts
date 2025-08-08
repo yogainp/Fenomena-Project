@@ -675,6 +675,7 @@ export async function GET(request: NextRequest) {
         const { error: saveError } = await supabase
           .from('analysis_results')
           .insert({
+            id: crypto.randomUUID(),
             analysisType: 'FENOMENA_INSIGHTS',
             results: insight,
             phenomenonId: insight.phenomenonId,

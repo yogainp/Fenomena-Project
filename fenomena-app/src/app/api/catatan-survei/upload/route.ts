@@ -87,14 +87,23 @@ export async function POST(request: NextRequest) {
     };
     
     // Validate category exists
-    const [category, regions] = await Promise.all([
-      prisma.surveyCategory.findUnique({ where: { id: categoryId } }),
-      prisma.region.findMany(),
+    const [categoryResult, regionsResult] = await Promise.all([
+      supabase
+        .from('survey_categories')
+        .select('*')
+        .eq('id', categoryId)
+        .single(),
+      supabase
+        .from('regions')
+        .select('*'),
     ]);
+    
+    const category = categoryResult.data;
+    const regions = regionsResult.data || [];
     
     console.log('Found category:', category?.name);
     
-    if (!category) {
+    if (categoryResult.error || !category) {
       return NextResponse.json(
         { error: 'Kategori tidak ditemukan' },
         { status: 400 }
@@ -179,6 +188,7 @@ export async function POST(request: NextRequest) {
       const respondenId = `${categoryId}-${nomorRespondenInt}`;
       
       validData.push({
+        id: crypto.randomUUID(), // Generate UUID for Supabase
         nomorResponden: nomorRespondenInt, // Use integer value
         respondenId,
         catatan: rowData.catatan,
@@ -200,59 +210,58 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Execute replace operation in transaction
-    await prisma.$transaction(async (tx) => {
-      // Step 1: Delete existing data for this category combination
-      const deletedCount = await tx.catatanSurvei.deleteMany({
-        where: {
-          categoryId,
-        },
-      });
-      
-      console.log(`Deleted ${deletedCount.count} existing records for ${category?.name || 'Unknown Category'}`);
-      
-      // Step 2: Insert new data in batches
-      if (validData.length > 0) {
-        const batchSize = 1000;
-        for (let i = 0; i < validData.length; i += batchSize) {
-          const batch = validData.slice(i, i + batchSize);
-          await tx.catatanSurvei.createMany({
-            data: batch,
-            skipDuplicates: false,
-          });
+    // Execute replace operation
+    // Step 1: Delete existing data for this category combination
+    const { error: deleteError } = await supabase
+      .from('catatan_survei')
+      .delete()
+      .eq('categoryId', categoryId);
+    
+    if (deleteError) {
+      console.error('Delete error:', deleteError);
+      return NextResponse.json(
+        { error: 'Gagal menghapus data lama' },
+        { status: 500 }
+      );
+    }
+    
+    console.log(`Deleted existing records for ${category?.name || 'Unknown Category'}`);
+    
+    // Step 2: Insert new data in batches
+    if (validData.length > 0) {
+      const batchSize = 1000;
+      for (let i = 0; i < validData.length; i += batchSize) {
+        const batch = validData.slice(i, i + batchSize);
+        const { error: insertError } = await supabase
+          .from('catatan_survei')
+          .insert(batch);
+          
+        if (insertError) {
+          console.error(`Batch insert error (${i}-${i + batch.length}):`, insertError);
+          return NextResponse.json(
+            { error: `Gagal menyimpan data batch ${i + 1}-${i + batch.length}: ${insertError.message}` },
+            { status: 500 }
+          );
         }
       }
-    });
+    }
     
     // Get preview data (first 50 records)
-    const preview = await prisma.catatanSurvei.findMany({
-      where: {
-        categoryId,
-      },
-      take: 50,
-      orderBy: {
-        nomorResponden: 'asc',
-      },
-      include: {
-        region: {
-          select: {
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        category: {
-          select: {
-            name: true,
-          },
-        },
-        user: {
-          select: {
-            username: true,
-          },
-        },
-      },
-    });
+    const { data: preview, error: previewError } = await supabase
+      .from('catatan_survei')
+      .select(`
+        *,
+        region:regions(province, city, regionCode),
+        category:survey_categories(name),
+        user:users(username)
+      `)
+      .eq('categoryId', categoryId)
+      .order('nomorResponden', { ascending: true })
+      .limit(50);
+
+    if (previewError) {
+      console.error('Preview error:', previewError);
+    }
     
     return NextResponse.json({
       success: true,

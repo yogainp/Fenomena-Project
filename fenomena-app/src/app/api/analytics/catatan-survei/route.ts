@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const customKeywordsParam = searchParams.get('customKeywords');
 
-    // Build Supabase query
+    // Build base query for data
     let query = supabase
       .from('catatan_survei')
       .select(`
@@ -36,40 +36,124 @@ export async function GET(request: NextRequest) {
         user:users(id, username)
       `);
 
-    // Apply filters
+    // Build count query for total records
+    let countQuery = supabase
+      .from('catatan_survei')
+      .select('*', { count: 'exact', head: true });
+
+    // Apply filters to both queries
     if (categoryId && categoryId !== 'all') {
       query = query.eq('categoryId', categoryId);
+      countQuery = countQuery.eq('categoryId', categoryId);
     }
     if (regionId && regionId !== 'all') {
       query = query.eq('regionId', regionId);
+      countQuery = countQuery.eq('regionId', regionId);
     }
     if (startDate) {
       query = query.gte('createdAt', startDate);
+      countQuery = countQuery.gte('createdAt', startDate);
     }
     if (endDate) {
       query = query.lte('createdAt', endDate + 'T23:59:59.999Z');
+      countQuery = countQuery.lte('createdAt', endDate + 'T23:59:59.999Z');
     }
 
-    // Apply role-based data filtering
+    // Apply role-based data filtering to both queries
     if (user.role !== 'ADMIN') {
       if (user.regionId) {
         // Regional user can see data from their region
         query = query.eq('regionId', user.regionId);
+        countQuery = countQuery.eq('regionId', user.regionId);
       } else {
         // Regular user can only see their own data
         query = query.eq('userId', user.userId);
+        countQuery = countQuery.eq('userId', user.userId);
       }
     }
 
-    const { data: catatanSurvei, error } = await query;
-
-    if (error) {
-      console.error('Supabase error:', error);
+    // Get total count first
+    const { count: totalCount, error: countError } = await countQuery;
+    
+    if (countError) {
+      console.error('Supabase count query error:', countError);
       return NextResponse.json({ 
-        error: 'Database error',
-        details: error.message 
+        error: 'Database count error',
+        details: countError.message 
       }, { status: 500 });
     }
+
+    // Fetch all records using pagination to bypass 1000 limit
+    let allCatatanSurvei: any[] = [];
+    const pageSize = 1000;
+    const totalPages = Math.ceil((totalCount || 0) / pageSize);
+    
+    console.log(`Fetching ${totalCount} records in ${totalPages} pages...`);
+    
+    for (let page = 0; page < totalPages; page++) {
+      const start = page * pageSize;
+      const end = start + pageSize - 1;
+      
+      // Create a new query for this page with the same filters
+      let pageQuery = supabase
+        .from('catatan_survei')
+        .select(`
+          id,
+          catatan,
+          createdAt,
+          category:survey_categories(id, name),
+          region:regions(id, province, city, regionCode),
+          user:users(id, username)
+        `);
+
+      // Apply the same filters as the original query
+      if (categoryId && categoryId !== 'all') {
+        pageQuery = pageQuery.eq('categoryId', categoryId);
+      }
+      if (regionId && regionId !== 'all') {
+        pageQuery = pageQuery.eq('regionId', regionId);
+      }
+      if (startDate) {
+        pageQuery = pageQuery.gte('createdAt', startDate);
+      }
+      if (endDate) {
+        pageQuery = pageQuery.lte('createdAt', endDate + 'T23:59:59.999Z');
+      }
+
+      // Apply role-based data filtering
+      if (user.role !== 'ADMIN') {
+        if (user.regionId) {
+          pageQuery = pageQuery.eq('regionId', user.regionId);
+        } else {
+          pageQuery = pageQuery.eq('userId', user.userId);
+        }
+      }
+      
+      // Add pagination
+      pageQuery = pageQuery.range(start, end);
+      
+      const { data: pageData, error: pageError } = await pageQuery;
+      
+      if (pageError) {
+        console.error(`Error fetching page ${page}:`, pageError);
+        return NextResponse.json({ 
+          error: 'Database error during pagination',
+          details: pageError.message 
+        }, { status: 500 });
+      }
+      
+      if (pageData) {
+        allCatatanSurvei = allCatatanSurvei.concat(pageData);
+      }
+      
+      // If we got less than pageSize, we're done
+      if (!pageData || pageData.length < pageSize) {
+        break;
+      }
+    }
+    
+    console.log(`Successfully fetched ${allCatatanSurvei.length} records`);
+    const catatanSurvei = allCatatanSurvei;
 
     // Simple text analysis functions (same as phenomena analysis)
     function extractKeywords(text: string): string[] {
@@ -264,7 +348,8 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      totalCatatanSurvei: catatanSurvei ? catatanSurvei.length : 0,
+      totalCatatanSurvei: totalCount || 0,
+      processedRecords: catatanSurvei ? catatanSurvei.length : 0,
       topKeywords,
       sentimentAnalysis: [
         { name: 'Positif', value: sentimentAnalysis.positive },

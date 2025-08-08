@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
     const { data: newRegion, error: createError } = await supabase
       .from('regions')
       .insert({
+        id: crypto.randomUUID(),
         province,
         city,
         regionCode,

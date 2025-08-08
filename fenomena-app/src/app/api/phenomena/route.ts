@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth';
+import { requireAuth } from '@/lib/middleware';
 import * as XLSX from 'xlsx';
 
 const phenomenonSchema = z.object({
@@ -222,12 +223,13 @@ export async function POST(request: NextRequest) {
     const validatedData = phenomenonSchema.parse(body);
 
     // Get current user's region
-    const currentUser = await prisma.user.findUnique({
-      where: { id: user.userId },
-      select: { regionId: true, role: true },
-    });
+    const { data: currentUser, error: userError } = await supabase
+      .from('users')
+      .select('regionId, role')
+      .eq('id', user.userId)
+      .single();
 
-    if (!currentUser) {
+    if (userError || !currentUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -247,45 +249,52 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify category exists
-    const category = await prisma.surveyCategory.findUnique({
-      where: { id: validatedData.categoryId },
-    });
-    if (!category) {
+    const { data: category, error: categoryError } = await supabase
+      .from('survey_categories')
+      .select('id')
+      .eq('id', validatedData.categoryId)
+      .single();
+      
+    if (categoryError || !category) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     }
 
-
     // Verify region exists
-    const region = await prisma.region.findUnique({
-      where: { id: validatedData.regionId },
-    });
-    if (!region) {
+    const { data: region, error: regionError } = await supabase
+      .from('regions')
+      .select('id')
+      .eq('id', validatedData.regionId)
+      .single();
+      
+    if (regionError || !region) {
       return NextResponse.json({ error: 'Region not found' }, { status: 404 });
     }
 
-    const phenomenon = await prisma.phenomenon.create({
-      data: {
-        ...validatedData,
-        userId: user.userId,
-      },
-      include: {
-        category: {
-          select: {
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-      },
-    });
+    // Create the phenomenon
+    const insertData = {
+      id: crypto.randomUUID(),
+      ...validatedData,
+      userId: user.userId,
+    };
+    
+    console.log('Attempting to insert phenomenon data:', JSON.stringify(insertData, null, 2));
+    console.log('User info:', JSON.stringify({ userId: user.userId, email: user.email, role: user.role }, null, 2));
+    
+    const { data: phenomenon, error: createError } = await supabase
+      .from('phenomena')
+      .insert(insertData)
+      .select('*')
+      .single();
+
+    if (createError) {
+      console.error('Create phenomenon error:', createError);
+      console.error('Create phenomenon error details:', JSON.stringify(createError, null, 2));
+      return NextResponse.json({ 
+        error: 'Failed to create phenomenon', 
+        details: createError.message,
+        code: createError.code 
+      }, { status: 500 });
+    }
 
     return NextResponse.json(phenomenon, { status: 201 });
   } catch (error: any) {
