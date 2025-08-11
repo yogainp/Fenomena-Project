@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install && npx playwright install --with-deps chromium",
+  "functions": {
+    "pages/api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
+  }
+}
