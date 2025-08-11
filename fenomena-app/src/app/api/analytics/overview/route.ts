@@ -100,9 +100,9 @@ export async function GET(request: NextRequest) {
     // Process monthly trend data (this year only)
     const currentYear = new Date().getFullYear();
     const monthlyTrendProcessed = phenomena
-      .filter(p => new Date(p.createdAt).getFullYear() === currentYear)
+      .filter(p => new Date((p as any).createdAt).getFullYear() === currentYear)
       .reduce((acc: { [key: string]: number }, phenomenon) => {
-        const month = new Date(phenomenon.createdAt).toISOString().slice(0, 7); // YYYY-MM format
+        const month = new Date((phenomenon as any).createdAt).toISOString().slice(0, 7); // YYYY-MM format
         acc[month] = (acc[month] || 0) + 1;
         return acc;
       }, {});

@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -162,8 +162,11 @@ export async function POST(request: NextRequest) {
       isVerified,
     });
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = newUser;
+    // Return user without password (newUser from Supabase might not have password field)
+    const userWithoutPassword = { ...(newUser as any) };
+    if ('password' in userWithoutPassword) {
+      delete userWithoutPassword.password;
+    }
 
     return NextResponse.json({
       message: 'User created successfully',

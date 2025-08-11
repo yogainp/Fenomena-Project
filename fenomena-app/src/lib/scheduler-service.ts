@@ -33,7 +33,7 @@ class SchedulerService {
 
       // Create cron jobs for each active schedule
       for (const schedule of activeSchedules) {
-        await this.createCronJob(schedule);
+        await this.createCronJob(schedule as any);
       }
 
       this.isInitialized = true;
@@ -64,7 +64,7 @@ class SchedulerService {
       });
 
       // Calculate next run time
-      const nextRun = this.getNextRunTime(schedule.cronSchedule);
+      const nextRun = this.getNextRunTime(schedule.cronSchedule as string);
       const { error: updateError } = await supabase
         .from('scrapping_schedules')
         .update({ nextRun: nextRun.toISOString() })
@@ -103,7 +103,7 @@ class SchedulerService {
 
       // Update lastRun and nextRun
       const now = new Date();
-      const nextRun = this.getNextRunTime(schedule.cronSchedule);
+      const nextRun = this.getNextRunTime(schedule.cronSchedule as string);
       
       const { error: updateError } = await supabase
         .from('scrapping_schedules')
@@ -118,15 +118,15 @@ class SchedulerService {
       }
 
       // Execute scraping using existing service
-      console.log(`🔍 Starting scraping for "${schedule.name}" from ${schedule.portalUrl}`);
+      console.log(`🔍 Starting scraping for "${(schedule as any).name}" from ${(schedule as any).portalUrl}`);
       
       const scrapingResult = await scrapeNewsFromPortal({
-        portalUrl: schedule.portalUrl,
-        maxPages: schedule.maxPages,
-        delayMs: schedule.delayMs
+        portalUrl: (schedule as any).portalUrl,
+        maxPages: (schedule as any).maxPages,
+        delayMs: (schedule as any).delayMs
       });
 
-      console.log(`✅ Scheduled scraping completed for "${schedule.name}":`, {
+      console.log(`✅ Scheduled scraping completed for "${(schedule as any).name}":`, {
         totalScraped: scrapingResult.totalScraped,
         newItems: scrapingResult.newItems,
         duplicates: scrapingResult.duplicates,
@@ -147,7 +147,7 @@ class SchedulerService {
         .from('scrapping_schedules')
         .update({ 
           lastRun: new Date().toISOString(),
-          nextRun: this.getNextRunTime(scheduleForCron?.cronSchedule || '0 0 * * *').toISOString()
+          nextRun: this.getNextRunTime((scheduleForCron?.cronSchedule as string) || '0 0 * * *').toISOString()
         })
         .eq('id', scheduleId);
     }
@@ -181,13 +181,13 @@ class SchedulerService {
         .from('scrapping_schedules')
         .insert({
           id: crypto.randomUUID(),
-          name: scheduleData.name,
-          portalUrl: scheduleData.portalUrl,
-          maxPages: scheduleData.maxPages || 5,
-          delayMs: scheduleData.delayMs || 2000,
-          cronSchedule: scheduleData.cronSchedule,
-          isActive: scheduleData.isActive !== false,
-          nextRun: this.getNextRunTime(scheduleData.cronSchedule).toISOString()
+          name: (scheduleData as any).name,
+          portalUrl: (scheduleData as any).portalUrl,
+          maxPages: (scheduleData as any).maxPages || 5,
+          delayMs: (scheduleData as any).delayMs || 2000,
+          cronSchedule: (scheduleData as any).cronSchedule,
+          isActive: (scheduleData as any).isActive !== false,
+          nextRun: this.getNextRunTime((scheduleData as any).cronSchedule).toISOString()
         })
         .select()
         .single();
@@ -198,7 +198,7 @@ class SchedulerService {
 
       // Create cron job if active
       if (schedule.isActive) {
-        await this.createCronJob(schedule);
+        await this.createCronJob(schedule as any);
       }
 
       console.log(`✅ Schedule "${schedule.name}" added successfully`);
@@ -239,7 +239,7 @@ class SchedulerService {
 
       // Create new cron job if active
       if (updatedSchedule.isActive) {
-        await this.createCronJob(updatedSchedule);
+        await this.createCronJob(updatedSchedule as any);
       }
 
       console.log(`✅ Schedule "${updatedSchedule.name}" updated successfully`);
@@ -304,7 +304,7 @@ class SchedulerService {
         .from('scrapping_schedules')
         .update({ 
           isActive: newActiveState,
-          nextRun: newActiveState ? this.getNextRunTime(schedule.cronSchedule).toISOString() : null
+          nextRun: newActiveState ? this.getNextRunTime((schedule as any).cronSchedule).toISOString() : null
         })
         .eq('id', scheduleId)
         .select()
@@ -319,7 +319,7 @@ class SchedulerService {
       if (newActiveState) {
         // Activate: create cron job if not exists
         if (!existingJob) {
-          await this.createCronJob(updatedSchedule);
+          await this.createCronJob(updatedSchedule as any);
         }
       } else {
         // Deactivate: remove cron job if exists

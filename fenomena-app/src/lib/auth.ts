@@ -94,7 +94,7 @@ export async function authenticateUser(email: string, password: string) {
     return null;
   }
 
-  const isValid = await verifyPassword(password, user.password);
+  const isValid = await verifyPassword(password, user.password as string);
   if (!isValid) {
     return null;
   }

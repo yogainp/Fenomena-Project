@@ -13,15 +13,16 @@ const updateKeywordSchema = z.object({
 // GET /api/admin/scrapping-keywords/[id] - Get single keyword
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const { data: keyword, error } = await supabase
       .from('scrapping_keywords')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
       
     if (error || !keyword) {
@@ -42,10 +43,11 @@ export async function GET(
 // PUT /api/admin/scrapping-keywords/[id] - Update keyword
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const body = await request.json();
     const validationResult = updateKeywordSchema.safeParse(body);
@@ -53,7 +55,7 @@ export async function PUT(
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -63,7 +65,7 @@ export async function PUT(
     const { data: existingKeyword, error: findError } = await supabase
       .from('scrapping_keywords')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
       
     if (findError || !existingKeyword) {
@@ -78,7 +80,7 @@ export async function PUT(
         .eq('keyword', updates.keyword.toLowerCase().trim())
         .single();
 
-      if (duplicateKeyword && duplicateKeyword.id !== params.id) {
+      if (duplicateKeyword && duplicateKeyword.id !== id) {
         return NextResponse.json({
           error: 'Keyword already exists',
         }, { status: 409 });
@@ -107,7 +109,7 @@ export async function PUT(
         ...updateData,
         updatedAt: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
       
@@ -133,16 +135,17 @@ export async function PUT(
 // DELETE /api/admin/scrapping-keywords/[id] - Delete keyword
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if keyword exists
     const { data: existingKeyword, error: findError } = await supabase
       .from('scrapping_keywords')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
       
     if (findError || !existingKeyword) {
@@ -153,7 +156,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('scrapping_keywords')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
       
     if (deleteError) {
       console.error('Error deleting keyword:', deleteError);

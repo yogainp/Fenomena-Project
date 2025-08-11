@@ -16,10 +16,11 @@ const updateUserSchema = z.object({
 // GET /api/admin/users/[id] - Get specific user
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Get user with region data
     const { data: user, error: userError } = await supabase
@@ -41,7 +42,7 @@ export async function GET(
           regionCode
         )
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (userError) {
@@ -56,7 +57,7 @@ export async function GET(
     const { count: phenomenaCount, error: countError } = await supabase
       .from('phenomena')
       .select('*', { count: 'exact', head: true })
-      .eq('userId', params.id);
+      .eq('userId', id);
 
     if (countError) {
       console.error('Error counting phenomena:', countError);
@@ -81,10 +82,11 @@ export async function GET(
 // PUT /api/admin/users/[id] - Update user
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const body = await request.json();
     const validationResult = updateUserSchema.safeParse(body);
@@ -92,7 +94,7 @@ export async function PUT(
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -102,7 +104,7 @@ export async function PUT(
     const { data: existingUser, error: existsError } = await supabase
       .from('users')
       .select('id, email, username, isVerified')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -122,7 +124,7 @@ export async function PUT(
           .from('users')
           .select('id')
           .eq('email', updateData.email)
-          .neq('id', params.id)
+          .neq('id', id)
           .single();
         
         if (emailConflict) {
@@ -135,7 +137,7 @@ export async function PUT(
           .from('users')
           .select('id')
           .eq('username', updateData.username)
-          .neq('id', params.id)
+          .neq('id', id)
           .single();
         
         if (usernameConflict) {
@@ -177,7 +179,7 @@ export async function PUT(
     const { data: updatedUser, error: updateError } = await supabase
       .from('users')
       .update(dataToUpdate)
-      .eq('id', params.id)
+      .eq('id', id)
       .select(`
         id,
         email,
@@ -206,7 +208,7 @@ export async function PUT(
     const { count: phenomenaCount, error: countError } = await supabase
       .from('phenomena')
       .select('*', { count: 'exact', head: true })
-      .eq('userId', params.id);
+      .eq('userId', id);
 
     if (countError) {
       console.error('Error counting phenomena:', countError);
@@ -234,16 +236,17 @@ export async function PUT(
 // DELETE /api/admin/users/[id] - Delete user
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if user exists
     const { data: existingUser, error: existsError } = await supabase
       .from('users')
       .select('id, username')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -258,7 +261,7 @@ export async function DELETE(
     const { count: phenomenaCount, error: countError } = await supabase
       .from('phenomena')
       .select('*', { count: 'exact', head: true })
-      .eq('userId', params.id);
+      .eq('userId', id);
 
     if (countError) {
       console.error('Error counting phenomena:', countError);
@@ -275,7 +278,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('users')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (deleteError) {
       console.error('Error deleting user:', deleteError);

@@ -19,18 +19,15 @@ export async function GET(request: NextRequest) {
   try {
     requireRole(request, 'ADMIN');
 
-    const categories = await prisma.surveyCategory.findMany({
-      orderBy: {
-        startDate: 'desc',
-      },
-      include: {
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    const { data: categories, error } = await supabase
+      .from('survey_categories')
+      .select('*')
+      .order('startDate', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching periods:', error);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json({ periods: categories });
   } catch (error: any) {
@@ -49,9 +46,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = periodSchema.parse(body);
 
-    const existingCategory = await prisma.surveyCategory.findUnique({
-      where: { name: validatedData.name },
-    });
+    const { data: existingCategory, error: checkError } = await supabase
+      .from('survey_categories')
+      .select('id')
+      .eq('name', validatedData.name)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking existing category:', checkError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (existingCategory) {
       return NextResponse.json(
@@ -60,13 +64,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const period = await prisma.surveyCategory.create({
-      data: {
+    const { data: period, error: createError } = await supabase
+      .from('survey_categories')
+      .insert({
+        id: crypto.randomUUID(),
         name: validatedData.name,
-        startDate: new Date(validatedData.startDate),
-        endDate: new Date(validatedData.endDate),
-      },
-    });
+        startDate: validatedData.startDate,
+        endDate: validatedData.endDate,
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Error creating period:', createError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json(period, { status: 201 });
   } catch (error: any) {
@@ -75,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }

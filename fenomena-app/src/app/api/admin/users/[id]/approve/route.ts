@@ -5,16 +5,17 @@ import { requireRole } from '@/lib/middleware';
 // PATCH /api/admin/users/[id]/approve - Approve user
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if user exists
     const { data: existingUser, error: existsError } = await supabase
       .from('users')
       .select('id, username, email, isVerified')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -37,7 +38,7 @@ export async function PATCH(
         verifiedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select('id, email, username, isVerified, verifiedAt')
       .single();
 

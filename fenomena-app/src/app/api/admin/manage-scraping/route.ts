@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const newSchedule = await schedulerService.addSchedule(scheduleData);
+    const newSchedule = await schedulerService.addSchedule({...scheduleData, type: 'scraping'} as any);
 
     return NextResponse.json({
       message: 'Schedule created successfully',

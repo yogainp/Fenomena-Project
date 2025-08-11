@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Portal-specific keywords
-      const portalName = berita.portalBerita;
+      const portalName = (berita as any).portalBerita as string;
       if (!portalKeywords[portalName]) {
         portalKeywords[portalName] = [];
       }
@@ -255,7 +255,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average content length
-    const avgContentLength = beritaList.reduce((sum, b) => sum + b.isi.length, 0) / beritaList.length;
+    const avgContentLength = beritaList.reduce((sum, b) => sum + ((b as any).isi as string).length, 0) / beritaList.length;
 
     // Word cloud data (top 50 words for visualization)
     const wordCloudData = Object.entries(wordFrequency)

@@ -374,8 +374,8 @@ export async function GET(request: NextRequest) {
       category: {
         id: categoriesMap.get(p.categoryId)?.id,
         name: categoriesMap.get(p.categoryId)?.name,
-        startDate: categoriesMap.get(p.categoryId)?.startDate ? new Date(categoriesMap.get(p.categoryId).startDate) : undefined,
-        endDate: categoriesMap.get(p.categoryId)?.endDate ? new Date(categoriesMap.get(p.categoryId).endDate) : undefined,
+        startDate: categoriesMap.get(p.categoryId)?.startDate ? new Date(categoriesMap.get(p.categoryId)!.startDate as string) : undefined,
+        endDate: categoriesMap.get(p.categoryId)?.endDate ? new Date(categoriesMap.get(p.categoryId)!.endDate as string) : undefined,
       },
       region: {
         id: regionsMap.get(p.regionId)?.id,
@@ -411,7 +411,7 @@ export async function GET(request: NextRequest) {
           const firstWordOfTitle = phenomenon.title.split(' ')[0];
           
           
-          let potentialNews = [];
+          let potentialNews: any[] = [];
           let newsError = null;
           
           try {
@@ -438,7 +438,7 @@ export async function GET(request: NextRequest) {
           }
 
           // Find related survey notes (with timeout and limits)
-          let surveyNotes = [];
+          let surveyNotes: any[] = [];
           let surveyError = null;
           
           try {
@@ -508,7 +508,7 @@ export async function GET(request: NextRequest) {
               return null;
             }
           }).filter(news => news && news.relevanceScore > 20) // Filter out null items and low relevance news
-            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .sort((a, b) => (b?.relevanceScore || 0) - (a?.relevanceScore || 0))
             .slice(0, 5); // Top 5 most relevant news
 
           // Analyze survey notes
@@ -528,7 +528,7 @@ export async function GET(request: NextRequest) {
             .slice(0, 5);
 
           // Extract keywords from news and survey notes
-          const allNewsKeywords = correlatedNews.flatMap(news => extractKeywords(`${news.judul}`));
+          const allNewsKeywords = correlatedNews.flatMap(news => extractKeywords(`${news?.judul || ''}`));
           const allSurveyKeywords = analyzedSurveyNotes.flatMap(note => extractKeywords(note.catatan));
 
           // Find common and unique keywords
@@ -548,7 +548,7 @@ export async function GET(request: NextRequest) {
 
           // Calculate sentiment analysis
           const newsSentiments = correlatedNews.map(news => 
-            getSentimentScore(`${news.judul} ${news.isi}`)
+            getSentimentScore(`${news?.judul || ''} ${(news as any)?.isi || ''}`)
           );
           const surveySentiments = analyzedSurveyNotes.map(note => note.sentiment);
 
@@ -580,10 +580,10 @@ export async function GET(request: NextRequest) {
 
           // Calculate metrics
           const validationStrength = Math.min(100, correlatedNews.length * 20);
-          const publicInterest = Math.min(100, correlatedNews.reduce((sum, news) => sum + news.relevanceScore, 0) / 5);
+          const publicInterest = Math.min(100, correlatedNews.reduce((sum, news) => sum + (news?.relevanceScore || 0), 0) / 5);
           const sentimentAlignment = alignmentScore;
           const evidenceDiversity = Math.min(100, 
-            (new Set(correlatedNews.map(news => news.portalBerita)).size) * 35
+            (new Set(correlatedNews.map(news => news?.portalBerita || '')).size) * 35
           );
 
           const overallScore = Math.round(

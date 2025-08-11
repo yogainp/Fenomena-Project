@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       berita: (beritaList || []).map(item => ({
         ...item,
-        isi: item.isi.substring(0, 200) + (item.isi.length > 200 ? '...' : ''), // Truncate content for list view
+        isi: (item.isi as any).substring(0, 200) + ((item.isi as any).length > 200 ? '...' : ''), // Truncate content for list view
         analysisCount: 0, // TODO: Add analysis count from supabase if needed
       })),
       pagination: {
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 

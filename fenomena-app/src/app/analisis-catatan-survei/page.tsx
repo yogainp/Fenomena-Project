@@ -172,7 +172,7 @@ export default function AnalisisCatatanSurveiPage() {
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <div className="text-red-600 text-lg mb-4">{error}</div>
             <button
-              onClick={fetchAnalysisData}
+              onClick={() => fetchAnalysisData()}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             >
               Coba Lagi
@@ -329,7 +329,7 @@ export default function AnalisisCatatanSurveiPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
+                      label={({ name, value }) => `${name}: ${value || 0}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -478,7 +478,7 @@ export default function AnalisisCatatanSurveiPage() {
                     key={index}
                     className="text-center p-3 border rounded-lg hover:bg-gray-50"
                     style={{
-                      fontSize: `${Math.min(Math.max(word.value / 2 + 8, 10), 24)}px`,
+                      fontSize: `${Math.min(Math.max((word.value || 0) / 2 + 8, 10), 24)}px`,
                     }}
                   >
                     <div className="font-medium text-gray-800">{word.text}</div>
@@ -491,11 +491,11 @@ export default function AnalisisCatatanSurveiPage() {
         ) : !loading && (
           <div className="bg-white p-12 rounded-lg shadow text-center">
             <div className="text-gray-500 text-lg mb-4">
-              {analysisData && analysisData.totalCatatanSurvei === 0 
+              {analysisData && (analysisData as any).totalCatatanSurvei === 0 
                 ? 'Tidak ada data catatan survei yang ditemukan untuk filter yang dipilih.'
                 : 'Memuat data analisis...'}
             </div>
-            {analysisData && analysisData.totalCatatanSurvei === 0 && (
+            {analysisData && (analysisData as any).totalCatatanSurvei === 0 && (
               <button
                 onClick={resetFilters}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

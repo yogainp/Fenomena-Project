@@ -107,15 +107,15 @@ export async function GET(request: NextRequest) {
       // Transform data for export
       const exportData = (phenomena || []).map(p => ({
         id: p.id,
-        title: p.title,
-        description: p.description,
-        category: p.category?.name || 'N/A',
-        period: p.category?.periodeSurvei || 'N/A',
-        region: p.region?.city || '',
-        province: p.region?.province || '',
-        city: p.region?.city || '',
-        regionCode: p.region?.regionCode || '',
-        author: p.user?.username || 'Unknown',
+        title: (p as any).title,
+        description: (p as any).description,
+        category: (p as any).category?.name || 'N/A',
+        period: (p as any).category?.periodeSurvei || 'N/A',
+        region: (p as any).region?.city || '',
+        province: (p as any).region?.province || '',
+        city: (p as any).region?.city || '',
+        regionCode: (p as any).region?.regionCode || '',
+        author: (p as any).user?.username || 'Unknown',
         createdAt: p.createdAt,
       }));
 
@@ -129,8 +129,8 @@ export async function GET(request: NextRequest) {
             headers.join(','),
             ...exportData.map(row => [
               row.id,
-              `"${row.title.replace(/"/g, '""')}"`,
-              `"${row.description.replace(/"/g, '""')}"`,
+              `"${(row.title as string).replace(/"/g, '""')}"`,
+              `"${(row.description as string).replace(/"/g, '""')}"`,
               `"${row.category}"`,
               `"${row.period}"`,
               `"${row.region}"`,
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
             'Kota': row.city,
             'Kode Wilayah': row.regionCode,
             'Pembuat': row.author,
-            'Tanggal Dibuat': new Date(row.createdAt).toLocaleDateString('id-ID')
+            'Tanggal Dibuat': new Date(row.createdAt as any).toLocaleDateString('id-ID')
           })));
           
           const workbook = XLSX.utils.book_new();
@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }

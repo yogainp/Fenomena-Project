@@ -378,7 +378,7 @@ export default function AnalyticsPage() {
                     cy="50%"
                     outerRadius={100}
                     fill="#8884d8"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                   >
                     {overviewData.periodAnalysis && Array.isArray(overviewData.periodAnalysis) ? overviewData.periodAnalysis.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -590,7 +590,7 @@ export default function AnalyticsPage() {
                       cy="50%"
                       outerRadius={120}
                       fill="#8884d8"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                      label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                     >
                       {textAnalysisData.sentimentAnalysis.map((entry, index) => (
                         <Cell 

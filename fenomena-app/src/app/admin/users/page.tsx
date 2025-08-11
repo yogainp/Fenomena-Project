@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -43,7 +43,7 @@ interface ApiResponse {
   pagination: PaginationInfo;
 }
 
-export default function AdminUsersPage() {
+function AdminUsersContent() {
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
@@ -658,5 +658,13 @@ export default function AdminUsersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminUsersPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <AdminUsersContent />
+    </Suspense>
   );
 }

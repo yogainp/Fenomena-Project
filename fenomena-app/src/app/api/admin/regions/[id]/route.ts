@@ -12,16 +12,17 @@ const updateRegionSchema = z.object({
 // GET /api/admin/regions/[id] - Get specific region
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Get region data
     const { data: region, error: regionError } = await supabase
       .from('regions')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (regionError) {
@@ -40,11 +41,11 @@ export async function GET(
       supabase
         .from('users')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id),
+        .eq('regionId', id),
       supabase
         .from('users')
         .select('id, username, email, role')
-        .eq('regionId', params.id)
+        .eq('regionId', id)
         .limit(10)
     ]);
 
@@ -56,7 +57,7 @@ export async function GET(
       supabase
         .from('phenomena')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id),
+        .eq('regionId', id),
       supabase
         .from('phenomena')
         .select(`
@@ -67,7 +68,7 @@ export async function GET(
             username
           )
         `)
-        .eq('regionId', params.id)
+        .eq('regionId', id)
         .order('createdAt', { ascending: false })
         .limit(10)
     ]);
@@ -104,10 +105,11 @@ export async function GET(
 // PUT /api/admin/regions/[id] - Update region
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const body = await request.json();
     const validationResult = updateRegionSchema.safeParse(body);
@@ -115,7 +117,7 @@ export async function PUT(
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -125,7 +127,7 @@ export async function PUT(
     const { data: existingRegion, error: existsError } = await supabase
       .from('regions')
       .select('id, regionCode')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -142,7 +144,7 @@ export async function PUT(
         .from('regions')
         .select('id')
         .eq('regionCode', updateData.regionCode)
-        .neq('id', params.id)
+        .neq('id', id)
         .single();
 
       if (conflictError && conflictError.code !== 'PGRST116') {
@@ -167,7 +169,7 @@ export async function PUT(
     const { data: updatedRegion, error: updateError } = await supabase
       .from('regions')
       .update(dataToUpdate)
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -184,11 +186,11 @@ export async function PUT(
       supabase
         .from('users')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id),
+        .eq('regionId', id),
       supabase
         .from('phenomena')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id)
+        .eq('regionId', id)
     ]);
 
     if (userCountError) console.error('Error counting users:', userCountError);
@@ -215,16 +217,17 @@ export async function PUT(
 // DELETE /api/admin/regions/[id] - Delete region
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if region exists
     const { data: existingRegion, error: existsError } = await supabase
       .from('regions')
       .select('id, city, province, regionCode')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -243,11 +246,11 @@ export async function DELETE(
       supabase
         .from('users')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id),
+        .eq('regionId', id),
       supabase
         .from('phenomena')
         .select('*', { count: 'exact', head: true })
-        .eq('regionId', params.id)
+        .eq('regionId', id)
     ]);
 
     if (userCountError || phenomenaCountError) {
@@ -265,7 +268,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('regions')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (deleteError) {
       console.error('Error deleting region:', deleteError);

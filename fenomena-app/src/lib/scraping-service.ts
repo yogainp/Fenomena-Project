@@ -76,7 +76,7 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
       throw new Error('No active keywords found. Please add keywords first.');
     }
 
-    const keywordList = activeKeywords.map(k => k.keyword.toLowerCase());
+    const keywordList = activeKeywords.map(k => (k.keyword as string).toLowerCase());
     console.log(`Starting scraping with ${keywordList.length} active keywords:`, keywordList);
 
     // Launch browser
@@ -531,7 +531,7 @@ async function scrapePontianakPost(
           }
         }
         
-        const articles = [];
+        const articles: any[] = [];
 
         for (const element of articleElements) {
           let title = '';
@@ -768,7 +768,7 @@ async function scrapePontianakPost(
             }
 
             // Debug: Let's capture ALL potential date elements for analysis
-            const allDateElements = [];
+            const allDateElements: any[] = [];
             
             // Comprehensive date selectors for debugging
             const debugSelectors = [
@@ -968,7 +968,7 @@ async function scrapePontianakPost(
               ];
               
               // Remove excluded elements temporarily
-              const excludedElements = [];
+              const excludedElements: any[] = [];
               excludeSelectors.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 elements.forEach(el => {
@@ -1235,7 +1235,7 @@ async function scrapeKalbarOnline(
       
       // Extract article links and titles for Kalbar Online
       const articles = await page.evaluate(() => {
-        const articles = [];
+        const articles: any[] = [];
         
         // Try different selectors specific to Kalbar Online structure
         const selectors = [
@@ -1657,7 +1657,7 @@ async function scrapeAntaraNews(
       
       // Extract article links and titles for Antara News
       const articles = await page.evaluate(() => {
-        const articles = [];
+        const articles: any[] = [];
         
         // Try different selectors for Antara News
         const selectors = [
@@ -2124,7 +2124,7 @@ async function scrapeSuaraKalbar(
       
       // Extract article links and titles for Suara Kalbar
       const articles = await page.evaluate(() => {
-        const articles = [];
+        const articles: any[] = [];
         
         // Try Suara Kalbar specific selectors first
         const selectors = [

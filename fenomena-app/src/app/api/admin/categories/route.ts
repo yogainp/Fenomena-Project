@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         const { count: phenomenaCount, error: countError } = await supabase
           .from('phenomena')
           .select('*', { count: 'exact', head: true })
-          .eq('categoryId', category.id);
+          .eq('categoryId', (category as any).id);
 
         if (countError) {
           console.error('Error counting phenomena for category:', category.id, countError);
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get recent scraping activity
-    let recentNews = [];
+    let recentNews: any[] = [];
     try {
       const { data } = await supabase
         .from('scrapping_berita')

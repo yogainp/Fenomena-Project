@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     console.log('Where conditions:', JSON.stringify(whereConditions, null, 2));
 
     // Get keywords with individual error handling
-    let keywords = [];
+    let keywords: any[] = [];
     let totalKeywords = 0;
     
     try {
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -220,7 +220,7 @@ export async function PUT(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 

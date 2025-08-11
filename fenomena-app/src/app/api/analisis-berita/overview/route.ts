@@ -66,7 +66,8 @@ export async function GET(request: NextRequest) {
     // Group by portal manually
     const portalCounts: { [key: string]: number } = {};
     (allBerita || []).forEach(berita => {
-      portalCounts[berita.portalBerita] = (portalCounts[berita.portalBerita] || 0) + 1;
+      const portalKey = (berita as any).portalBerita as string;
+      portalCounts[portalKey] = (portalCounts[portalKey] || 0) + 1;
     });
 
     const portalAnalysis = Object.entries(portalCounts)
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
     // Group by publish date
     const dailyGrouped: { [key: string]: number } = {};
     (dailyData || []).forEach(berita => {
-      const dateKey = new Date(berita.tanggalBerita).toISOString().split('T')[0];
+      const dateKey = new Date((berita as any).tanggalBerita as string).toISOString().split('T')[0];
       dailyGrouped[dateKey] = (dailyGrouped[dateKey] || 0) + 1;
     });
 
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
       console.error('Error getting all keywords:', allKeywordsError);
     }
 
-    const activeKeywordsWithMatches = (allKeywords || []).filter(k => k.isActive && k.matchCount > 0).length;
+    const activeKeywordsWithMatches = (allKeywords || []).filter(k => (k as any).isActive && ((k as any).matchCount as number) > 0).length;
     const keywordEffectiveness = (totalActiveKeywords || 0) > 0 ? 
       Math.round((activeKeywordsWithMatches / (totalActiveKeywords || 1)) * 100) : 0;
 

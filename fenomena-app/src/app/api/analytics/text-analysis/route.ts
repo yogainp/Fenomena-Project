@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Category-specific keywords
-      const categoryName = phenomenon.category?.name || 'Unknown';
+      const categoryName = (phenomenon as any).category?.name || 'Unknown';
       if (!categoryKeywords[categoryName]) {
         categoryKeywords[categoryName] = [];
       }
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate average description length
     const avgDescriptionLength = phenomena && phenomena.length > 0 
-      ? phenomena.reduce((sum, p) => sum + (p.description?.length || 0), 0) / phenomena.length 
+      ? phenomena.reduce((sum, p) => sum + ((p as any).description?.length || 0), 0) / phenomena.length 
       : 0;
 
     // Word cloud data (top 50 words for visualization)
@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
           results: results,
           updatedAt: new Date().toISOString(),
         })
-        .eq('id', existingAnalysis.id)
+        .eq('id', (existingAnalysis as any).id)
         .select()
         .single();
 

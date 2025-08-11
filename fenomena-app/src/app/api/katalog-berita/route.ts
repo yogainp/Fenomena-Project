@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       berita: (berita || []).map(item => ({
         ...item,
         // Truncate content for list view
-        isi: item.isi && item.isi.length > 200 ? item.isi.substring(0, 200) + '...' : item.isi,
+        isi: (item as any).isi && ((item as any).isi as string).length > 200 ? ((item as any).isi as string).substring(0, 200) + '...' : (item as any).isi,
       })),
       pagination: {
         currentPage: page,

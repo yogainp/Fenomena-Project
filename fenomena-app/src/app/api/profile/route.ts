@@ -76,7 +76,17 @@ export async function GET(request: NextRequest) {
 // PUT /api/profile - Update current user profile
 export async function PUT(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
 
     const body = await request.json();
     const validationResult = updateProfileSchema.safeParse(body);
@@ -84,16 +94,23 @@ export async function PUT(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
     const { email, username, regionId, currentPassword, newPassword } = validationResult.data;
 
     // Get current user data
-    const currentUser = await prisma.user.findUnique({
-      where: { id: user.userId },
-    });
+    const { data: currentUser, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.userId)
+      .single();
+
+    if (userError) {
+      console.error('Error fetching user:', userError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (!currentUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -112,14 +129,26 @@ export async function PUT(request: NextRequest) {
       }
 
       if (conflictConditions.length > 0) {
-        const conflictUser = await prisma.user.findFirst({
-          where: {
-            AND: [
-              { id: { not: user.userId } },
-              { OR: conflictConditions },
-            ],
-          },
-        });
+        // Check for conflicts in Supabase
+        let conflictUser = null;
+        if (email && email !== currentUser.email) {
+          const { data } = await supabase
+            .from('users')
+            .select('id, email')
+            .eq('email', email)
+            .neq('id', user.userId)
+            .single();
+          if (data) conflictUser = data;
+        }
+        if (!conflictUser && username && username !== currentUser.username) {
+          const { data } = await supabase
+            .from('users')
+            .select('id, username')
+            .eq('username', username)
+            .neq('id', user.userId)
+            .single();
+          if (data) conflictUser = data;
+        }
 
         if (conflictUser) {
           const conflictField = conflictUser.email === email ? 'Email' : 'Username';
@@ -152,44 +181,59 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update user profile
-    const updatedUser = await prisma.user.update({
-      where: { id: user.userId },
-      data: dataToUpdate,
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        regionId: true,
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({
+        ...dataToUpdate,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', user.userId)
+      .select(`
+        id,
+        email,
+        username,
+        role,
+        createdAt,
+        updatedAt,
+        regionId,
+        regions:regionId (
+          id,
+          province,
+          city,
+          regionCode
+        )
+      `)
+      .single();
+
+    if (updateError) {
+      console.error('Error updating user:', updateError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get phenomena count
+    const { count: phenomenaCount } = await supabase
+      .from('phenomena')
+      .select('*', { count: 'exact', head: true })
+      .eq('userId', user.userId);
+
+    const response = {
+      message: 'Profile updated successfully',
+      user: {
+        ...updatedUser,
+        region: updatedUser.regions,
         _count: {
-          select: {
-            phenomena: true,
-          },
+          phenomena: phenomenaCount || 0,
         },
       },
-    });
+    };
 
     const responseMessage = newPassword ? 
       'Profile and password updated successfully' : 
       'Profile updated successfully';
 
     return NextResponse.json({
+      ...response,
       message: responseMessage,
-      user: {
-        ...updatedUser,
-        phenomenaCount: updatedUser._count.phenomena,
-        _count: undefined,
-      },
     });
 
   } catch (error: any) {

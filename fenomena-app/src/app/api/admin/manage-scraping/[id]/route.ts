@@ -19,9 +19,9 @@ const updateScheduleSchema = z.object({
 });
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // GET /api/admin/manage-scraping/[id] - Get specific schedule
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     requireRole(request, 'ADMIN');
 
-    const { id } = params;
+    const { id } = await params;
     const schedules = await schedulerService.getAllSchedules();
     const schedule = schedules.find(s => s.id === id);
 
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     requireRole(request, 'ADMIN');
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     
     const validationResult = updateScheduleSchema.safeParse(body);
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
@@ -101,7 +101,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     requireRole(request, 'ADMIN');
 
-    const { id } = params;
+    const { id } = await params;
     await schedulerService.deleteSchedule(id);
 
     return NextResponse.json({

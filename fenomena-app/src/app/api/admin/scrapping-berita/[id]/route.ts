@@ -5,15 +5,16 @@ import { requireRole } from '@/lib/middleware';
 // GET /api/admin/scrapping-berita/[id] - Get single news item
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const { data: berita, error } = await supabase
       .from('scrapping_berita')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error || !berita) {
@@ -24,7 +25,7 @@ export async function GET(
     const { data: analysisResults, error: analysisError } = await supabase
       .from('analysis_results')
       .select('*')
-      .eq('scrappingBeritaId', params.id)
+      .eq('scrappingBeritaId', id)
       .order('createdAt', { ascending: false });
 
     // If there's an error fetching analysis results, just log it but don't fail the request
@@ -51,16 +52,17 @@ export async function GET(
 // DELETE /api/admin/scrapping-berita/[id] - Delete single news item
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if news exists
     const { data: existingBerita, error: findError } = await supabase
       .from('scrapping_berita')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (findError || !existingBerita) {
@@ -71,7 +73,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('scrapping_berita')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
       
     if (deleteError) {
       console.error('Error deleting berita:', deleteError);

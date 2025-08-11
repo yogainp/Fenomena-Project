@@ -12,10 +12,11 @@ const phenomenonSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
+    const { id } = await params;
 
     const { data: phenomenon, error } = await supabase
       .from('phenomena')
@@ -25,7 +26,7 @@ export async function GET(
         category:survey_categories(id, name, periodeSurvei, startDate, endDate),
         region:regions(id, province, city, regionCode)
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {
@@ -49,10 +50,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
+    const { id } = await params;
 
     const body = await request.json();
     const validatedData = phenomenonSchema.parse(body);
@@ -60,7 +62,7 @@ export async function PUT(
     const { data: existingPhenomenon, error: fetchError } = await supabase
       .from('phenomena')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (fetchError) {
@@ -113,7 +115,7 @@ export async function PUT(
         categoryId: validatedData.categoryId,
         regionId: validatedData.regionId,
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select(`
         *,
         category:survey_categories(name, periodeSurvei, startDate, endDate),
@@ -135,7 +137,7 @@ export async function PUT(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }
@@ -146,15 +148,16 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
+    const { id } = await params;
 
     const { data: existingPhenomenon, error: fetchError } = await supabase
       .from('phenomena')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (fetchError || !existingPhenomenon) {
@@ -174,7 +177,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('phenomena')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (deleteError) {
       console.error('Supabase delete error:', deleteError);

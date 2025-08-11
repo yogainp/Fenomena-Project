@@ -37,6 +37,20 @@ interface Region {
   regionCode: string;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+}
+
+interface ApiResponse {
+  phenomena: Phenomenon[];
+  pagination: PaginationInfo;
+}
+
 export default function CatalogPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

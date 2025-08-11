@@ -778,7 +778,7 @@ export default function CatatanSurveiPage() {
                         <div>
                           <p className="text-sm font-medium text-green-800">{selectedFile.name}</p>
                           <p className="text-xs text-green-600">
-                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • 
+                            {((selectedFile.size || 0) / 1024 / 1024).toFixed(2)} MB • 
                             {selectedFile.type || 'text/csv'}
                           </p>
                         </div>

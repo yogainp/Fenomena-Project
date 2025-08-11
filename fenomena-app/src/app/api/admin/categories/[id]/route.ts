@@ -13,16 +13,17 @@ const categorySchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Get category
     const { data: category, error: categoryError } = await supabase
       .from('survey_categories')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (categoryError) {
@@ -37,7 +38,7 @@ export async function GET(
     const { count: phenomenaCount, error: countError } = await supabase
       .from('phenomena')
       .select('*', { count: 'exact', head: true })
-      .eq('categoryId', params.id);
+      .eq('categoryId', id);
 
     if (countError) {
       console.error('Error counting phenomena:', countError);
@@ -62,10 +63,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const body = await request.json();
     const validatedData = categorySchema.parse(body);
@@ -74,7 +76,7 @@ export async function PUT(
     const { data: existingCategory, error: existsError } = await supabase
       .from('survey_categories')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -90,7 +92,7 @@ export async function PUT(
       .from('survey_categories')
       .select('id')
       .eq('name', validatedData.name)
-      .neq('id', params.id)
+      .neq('id', id)
       .single();
 
     if (duplicateError && duplicateError.code !== 'PGRST116') {
@@ -116,7 +118,7 @@ export async function PUT(
         endDate: validatedData.endDate || null,
         updatedAt: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -132,7 +134,7 @@ export async function PUT(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: (error as any).errors },
         { status: 400 }
       );
     }
@@ -143,16 +145,17 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if category exists
     const { data: existingCategory, error: existsError } = await supabase
       .from('survey_categories')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (existsError) {
@@ -167,7 +170,7 @@ export async function DELETE(
     const { count: phenomenaCount, error: countError } = await supabase
       .from('phenomena')
       .select('*', { count: 'exact', head: true })
-      .eq('categoryId', params.id);
+      .eq('categoryId', id);
 
     if (countError) {
       console.error('Error counting phenomena:', countError);
@@ -185,7 +188,7 @@ export async function DELETE(
     const { error: deleteError } = await supabase
       .from('survey_categories')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (deleteError) {
       console.error('Error deleting category:', deleteError);

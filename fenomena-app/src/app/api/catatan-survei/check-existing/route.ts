@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       hasExistingData: (existingCount || 0) > 0,
       existingCount: existingCount || 0,
-      lastUploadedBy: existingData?.[0]?.user?.username || null,
+      lastUploadedBy: (existingData as any)?.[0]?.user?.username || null,
       lastUploadedAt: existingData?.[0]?.createdAt || null,
       categoryName: category.name,
       regionStats: processedRegionStats,

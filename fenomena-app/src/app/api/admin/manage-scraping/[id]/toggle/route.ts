@@ -3,9 +3,9 @@ import { requireRole } from '@/lib/middleware';
 import { schedulerService } from '@/lib/scheduler-service';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // POST /api/admin/manage-scraping/[id]/toggle - Toggle schedule active status
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     requireRole(request, 'ADMIN');
 
-    const { id } = params;
+    const { id } = await params;
     const updatedSchedule = await schedulerService.toggleSchedule(id);
 
     return NextResponse.json({
