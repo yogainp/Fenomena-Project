@@ -85,8 +85,19 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
     
     if (isProduction) {
       // Use @sparticuz/chromium for serverless environments
+      await chromium.font('https://raw.githack.com/googlei18n/noto-emoji/main/fonts/NotoColorEmoji.ttf');
+      
       browser = await puppeteer.launch({
-        args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+        ],
         defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: chromium.headless,
