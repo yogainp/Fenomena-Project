@@ -147,9 +147,9 @@ export async function POST(request: NextRequest) {
 
     // Update match count for matched keywords using helper function
     if (matchedKeywords && matchedKeywords.length > 0) {
-      const { incrementKeywordMatchCount } = await import('@/lib/supabase-helpers');
+      const { incrementKeywordMatchCountsByName } = await import('@/lib/supabase-helpers');
       try {
-        await incrementKeywordMatchCount(matchedKeywords);
+        await incrementKeywordMatchCountsByName(matchedKeywords);
       } catch (err) {
         console.warn('Error updating keyword match count:', err);
       }
