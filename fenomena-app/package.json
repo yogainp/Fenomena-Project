@@ -5,10 +5,9 @@
   "scripts": {
     "dev": "set PORT=3000 && next dev --turbopack --port 3000",
     "start": "set PORT=3000 && next start --port 3000",
-    "build": "npx playwright install chromium && next build",
+    "build": "next build",
     "lint": "next lint",
-    "server:restart": "node scripts/restart-server.js",
-    "postinstall": "npx playwright install chromium"
+    "server:restart": "node scripts/restart-server.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
@@ -22,7 +21,7 @@
     "next": "15.4.2",
     "node-cron": "^4.2.1",
     "pg": "^8.16.3",
-    "playwright": "^1.54.1",
+    "puppeteer": "^22.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.60.0",
