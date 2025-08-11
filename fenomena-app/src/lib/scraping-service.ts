@@ -241,7 +241,15 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
 
             // Save to database
             try {
-              await saveScrapedArticle(newsItem);
+              await saveScrapedArticle({
+                idBerita: crypto.randomUUID(),
+                portalBerita: portalUrl,
+                linkBerita: link,
+                judul: title,
+                isi: content || title,
+                tanggalBerita: date,
+                matchedKeywords,
+              });
               
               // Update keyword match counts
               for (const keyword of matchedKeywords) {
