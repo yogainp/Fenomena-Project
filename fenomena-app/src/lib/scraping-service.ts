@@ -56,7 +56,7 @@ async function checkDuplicateArticle(
 }
 
 // Helper function to extract date from article element
-function extractArticleDate($: cheerio.CheerioAPI, articleElement: cheerio.Cheerio<cheerio.Element>): Date {
+function extractArticleDate($: cheerio.CheerioAPI, articleElement: cheerio.Cheerio<any>): Date {
   // Try different date selectors commonly used in news sites
   const dateSelectors = [
     '.post-date',
