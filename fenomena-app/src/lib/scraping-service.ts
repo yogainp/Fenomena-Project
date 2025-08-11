@@ -1,5 +1,5 @@
 import puppeteer, { Browser, Page } from 'puppeteer-core';
-import chromium from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 // import { supabase } from './supabase';
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
@@ -84,11 +84,11 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
     const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
     
     if (isProduction) {
-      // Use chrome-aws-lambda for serverless environments
+      // Use @sparticuz/chromium for serverless environments
       browser = await puppeteer.launch({
-        args: chromium.args,
+        args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
         defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath,
+        executablePath: await chromium.executablePath(),
         headless: chromium.headless,
       });
     } else {
