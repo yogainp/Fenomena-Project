@@ -257,7 +257,7 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
                   (k.keyword as string).toLowerCase() === keyword
                 );
                 if (keywordObj?.id) {
-                  await incrementKeywordMatchCount(keywordObj.id);
+                  await incrementKeywordMatchCount(keywordObj.id as string);
                 }
               }
 
