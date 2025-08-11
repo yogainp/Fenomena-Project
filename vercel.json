@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "fenomena-app",
+  "builds": [
+    {
+      "src": "fenomena-app/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "fenomena-app/$1"
+    }
+  ]
+}
