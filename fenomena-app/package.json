@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "set PORT=3000 && next dev --turbopack --port 3000",
     "start": "set PORT=3000 && next start --port 3000",
-    "build": "npx playwright install --with-deps chromium && next build",
+    "build": "npx playwright install chromium && next build",
     "lint": "next lint",
     "server:restart": "node scripts/restart-server.js",
-    "postinstall": "npx playwright install --with-deps chromium"
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
