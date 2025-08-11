@@ -44,7 +44,7 @@ class SchedulerService {
     }
   }
 
-  private async createCronJob(schedule: any) {
+  private async createCronJob(schedule: { id: string; name: string; cronSchedule: string; isActive: boolean; type: string }) {
     try {
       // Validate cron expression
       if (!cron.validate(schedule.cronSchedule)) {
@@ -153,7 +153,7 @@ class SchedulerService {
     }
   }
 
-  private getNextRunTime(cronExpression: string): Date {
+  private getNextRunTime(_cronExpression: string): Date {
     try {
       // Parse cron expression and calculate next run
       // This is a simplified version - in production you might want to use a more robust cron parser
@@ -172,7 +172,7 @@ class SchedulerService {
     }
   }
 
-  async addSchedule(scheduleData: any) {
+  async addSchedule(scheduleData: { name: string; cronSchedule: string; type: string; isActive: boolean }) {
     try {
       console.log(`➕ Adding new schedule: ${scheduleData.name}`);
       
@@ -209,7 +209,7 @@ class SchedulerService {
     }
   }
 
-  async updateSchedule(scheduleId: string, updateData: any) {
+  async updateSchedule(scheduleId: string, updateData: { name?: string; cronSchedule?: string; isActive?: boolean }) {
     try {
       console.log(`📝 Updating schedule: ${scheduleId}`);
 

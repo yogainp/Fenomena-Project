@@ -1,5 +1,5 @@
 import { chromium, Browser, Page } from 'playwright';
-import { supabase } from './supabase';
+// import { supabase } from './supabase';
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
 interface ScrapingOptions {
@@ -1888,7 +1888,7 @@ async function scrapeAntaraNews(
                       console.log(`Found date from JSON-LD: ${dateString}`);
                       break;
                     }
-                  } catch (e) {
+                  } catch {
                     // Ignore JSON parse errors
                   }
                 }
@@ -2110,7 +2110,7 @@ async function scrapeSuaraKalbar(
           console.log(`[SUARA KALBAR] ✅ Found element with selector: ${selector}`);
           paginationLoaded = true;
           break;
-        } catch (e) {
+        } catch {
           console.log(`[SUARA KALBAR] ⚠️ Selector "${selector}" not found, trying next...`);
         }
       }
@@ -2141,7 +2141,7 @@ async function scrapeSuaraKalbar(
           'a[href*="/category/kalbar/"]'
         ];
         
-        let articleElements: NodeListOf<Element> | null = null;
+        // const articleElements: NodeListOf<Element> | null = null;
         
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector);
@@ -2354,7 +2354,7 @@ async function scrapeSuaraKalbar(
                   const content = metaElement.getAttribute('content') || '';
                   if (content) {
                     dateString = content;
-                    foundSelector = selector;
+                    // foundSelector = selector;
                     console.log(`[SUARA KALBAR] Found date using meta selector "${selector}": ${dateString}`);
                     break;
                   }
