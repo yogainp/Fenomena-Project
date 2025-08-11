@@ -354,10 +354,10 @@ async function scrapePontianakPost(
       const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}?page=${currentPage}`;
       console.log(`Scraping page ${currentPage}: ${pageUrl}`);
 
-      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 30000 });
       
       // Wait for page content to load
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForSelector('body', { timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for dynamic content
       
       // Check if we can find any content containers
@@ -1224,10 +1224,10 @@ async function scrapeKalbarOnline(
       const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}page/${currentPage}/`;
       console.log(`Scraping Kalbar Online page ${currentPage}: ${pageUrl}`);
 
-      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 30000 });
       
       // Wait for page content to load
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForSelector('body', { timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for dynamic content
       
       // Extract article links and titles for Kalbar Online
@@ -1646,10 +1646,10 @@ async function scrapeAntaraNews(
       const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}/${currentPage}`;
       console.log(`Scraping Antara News page ${currentPage}: ${pageUrl}`);
 
-      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 30000 });
       
       // Wait for page content to load
-      await page.waitForLoadState('domcontentloaded');
+      await page.waitForSelector('body', { timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for dynamic content
       
       // Extract article links and titles for Antara News
@@ -2082,11 +2082,11 @@ async function scrapeSuaraKalbar(
       const pageUrl = currentPage === 1 ? baseUrl : `${baseUrl}page/${currentPage}/`;
       console.log(`Scraping Suara Kalbar page ${currentPage}: ${pageUrl}`);
 
-      await page.goto(pageUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 30000 });
       
       // Wait for page content to load - extended for Suara Kalbar
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('body', { timeout: 30000 });
+      await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30000 });
       
       // Wait longer for dynamic content
       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
