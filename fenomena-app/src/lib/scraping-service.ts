@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import chromium from 'chrome-aws-lambda';
 // import { supabase } from './supabase';
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
@@ -79,11 +80,25 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
     const keywordList = activeKeywords.map(k => (k.keyword as string).toLowerCase());
     console.log(`Starting scraping with ${keywordList.length} active keywords:`, keywordList);
 
-    // Launch browser
-    browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
+    // Launch browser with environment-specific configuration
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    
+    if (isProduction) {
+      // Use chrome-aws-lambda for serverless environments
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath,
+        headless: chromium.headless,
+      });
+    } else {
+      // Use regular puppeteer for local development
+      const puppeteerRegular = require('puppeteer');
+      browser = await puppeteerRegular.launch({ 
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      });
+    }
     
     // Create page with user agent and headers
     const page = await browser.newPage();

@@ -21,7 +21,8 @@
     "next": "15.4.2",
     "node-cron": "^4.2.1",
     "pg": "^8.16.3",
-    "puppeteer": "^22.0.0",
+    "chrome-aws-lambda": "^10.1.0",
+    "puppeteer-core": "^22.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.60.0",
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.4.2",
+    "puppeteer": "^22.0.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "^5"
