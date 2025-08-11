@@ -23,7 +23,8 @@
       "Bash(python:*)",
       "Bash(dir:*)",
       "Bash(copy:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   }
