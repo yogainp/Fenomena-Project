@@ -1,4 +1,21 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+// Dynamic import wrapper for puppeteer to avoid bundling in production
+let puppeteer: any;
+let Browser: any;
+let Page: any;
+
+async function loadPuppeteer() {
+  if (!puppeteer) {
+    try {
+      const puppeteerModule = await import('puppeteer');
+      puppeteer = puppeteerModule.default;
+      Browser = puppeteerModule.Browser;
+      Page = puppeteerModule.Page;
+    } catch (error) {
+      throw new Error('Puppeteer is not available. Make sure it is installed and you are in development mode.');
+    }
+  }
+  return puppeteer;
+}
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
 interface ScrapingOptions {
@@ -178,7 +195,7 @@ function parseIndonesianDate(dateString: string): Date {
 
 // Pontianak Post scraping function with Chromium
 async function scrapePontianakPost(
-  page: Page, 
+  page: any, 
   baseUrl: string, 
   maxPages: number, 
   delayMs: number,
@@ -573,7 +590,7 @@ async function scrapePontianakPost(
 export async function scrapeNewsFromPortalChromium(options: ScrapingOptions): Promise<ScrapingResult> {
   const { portalUrl, maxPages, delayMs } = options;
   
-  let browser: Browser | null = null;
+  let browser: any = null;
   const result: ScrapingResult = {
     success: false,
     totalScraped: 0,
@@ -599,8 +616,11 @@ export async function scrapeNewsFromPortalChromium(options: ScrapingOptions): Pr
     const keywordList = activeKeywords.map(k => (k.keyword as string).toLowerCase());
     console.log(`[CHROMIUM] Starting scraping with ${keywordList.length} active keywords:`, keywordList);
 
+    // Load puppeteer dynamically
+    const puppeteerInstance = await loadPuppeteer();
+
     // Launch browser with optimized settings
-    browser = await puppeteer.launch({ 
+    browser = await puppeteerInstance.launch({ 
       headless: true,
       args: [
         '--no-sandbox', 
@@ -657,10 +677,12 @@ export async function testScrapeUrlChromium(url: string): Promise<{
   content?: string;
   error?: string;
 }> {
-  let browser: Browser | null = null;
+  let browser: any = null;
   
   try {
-    browser = await puppeteer.launch({ 
+    const puppeteerInstance = await loadPuppeteer();
+    
+    browser = await puppeteerInstance.launch({ 
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });

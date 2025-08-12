@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
-import { scrapeNewsFromPortalChromium } from '@/lib/scraping-service-chromium';
 import { z } from 'zod';
 
 // Allowed portals
@@ -69,11 +68,23 @@ export async function POST(request: NextRequest) {
       // Execute scraping based on engine
       if (scrapingEngine === 'chromium') {
         console.log(`[API] Using Chromium scraping for ${portalUrl}`);
-        scrapingResult = await scrapeNewsFromPortalChromium({
-          portalUrl,
-          maxPages,
-          delayMs,
-        });
+        
+        try {
+          // Dynamic import to avoid bundling chromium dependencies in production
+          const { scrapeNewsFromPortalChromium } = await import('@/lib/scraping-service-chromium');
+          scrapingResult = await scrapeNewsFromPortalChromium({
+            portalUrl,
+            maxPages,
+            delayMs,
+          });
+        } catch (dynamicImportError: any) {
+          console.error('[API] Failed to load chromium scraping service:', dynamicImportError);
+          return NextResponse.json({
+            error: 'Chromium scraping service unavailable',
+            details: 'Failed to load chromium dependencies. This usually happens in production environments where puppeteer is not available.',
+            suggestion: 'Use Axios scraping instead, or ensure you are running in development mode with puppeteer installed.',
+          }, { status: 503 });
+        }
       } else {
         console.log(`[API] Using Axios scraping for ${portalUrl}`);
         scrapingResult = await scrapeNewsFromPortal({
@@ -82,16 +93,13 @@ export async function POST(request: NextRequest) {
           delayMs,
         });
       }
-    } catch (importError: any) {
-      // Handle case where chromium dependencies are not available
-      if (scrapingEngine === 'chromium' && importError.message?.includes('puppeteer')) {
-        return NextResponse.json({
-          error: 'Chromium dependencies not available',
-          details: 'Puppeteer is not installed or available in this environment. Please install playwright/puppeteer or use Axios scraping.',
-          suggestion: 'Run "npm install puppeteer" to enable chromium scraping in development.',
-        }, { status: 503 });
-      }
-      throw importError; // Re-throw other errors
+    } catch (executionError: any) {
+      // Handle execution errors
+      console.error('[API] Scraping execution error:', executionError);
+      return NextResponse.json({
+        error: 'Scraping execution failed',
+        details: executionError.message || 'An error occurred during scraping execution.',
+      }, { status: 500 });
     }
 
     return NextResponse.json({
