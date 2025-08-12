@@ -63,84 +63,686 @@ const INDONESIAN_MONTHS: { [key: string]: number } = {
   'agu': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'des': 11
 };
 
-// Parse Indonesian date format
-function parseIndonesianDate(dateStr: string): Date | null {
-  try {
-    // Clean the date string
-    const cleanedDate = dateStr.toLowerCase()
-      .replace(/\s*\|\s*\d{2}:\d{2}\s*(wib|wit|wita)?/i, '') // Remove time part
-      .replace(/^(senin|selasa|rabu|kamis|jumat|sabtu|minggu),?\s*/i, '') // Remove day name
-      .trim();
-
-    // Pattern: DD Month YYYY (e.g., "11 agustus 2025")
-    const match = cleanedDate.match(/(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})/);
-    if (match) {
-      const day = parseInt(match[1]);
-      const monthName = match[2].toLowerCase();
-      const year = parseInt(match[3]);
-      
-      const month = INDONESIAN_MONTHS[monthName];
-      if (month !== undefined) {
-        return new Date(year, month, day);
-      }
-    }
-  } catch (error) {
-    console.warn('Error parsing Indonesian date:', dateStr, error);
+// Helper function to parse Indonesian date strings - Enhanced version from Chromium
+function parseIndonesianDate(dateString: string): Date {
+  if (!dateString) {
+    console.log('No date string provided, using current date');
+    return new Date();
   }
   
-  return null;
-}
-
-// Helper function to extract date from article element
-function extractArticleDate($: cheerio.CheerioAPI, articleElement: cheerio.Cheerio<any>, portalUrl: string): Date {
-  if (portalUrl.includes('pontianakpost')) {
-    // For Pontianak Post, look for date element near the title
-    const dateElement = articleElement.parent().find('date.latest__date').first();
-    if (dateElement.length) {
-      const dateText = dateElement.text().trim();
-      const parsedDate = parseIndonesianDate(dateText);
-      if (parsedDate) {
-        console.log(`✓ Parsed date: ${dateText} → ${parsedDate.toISOString()}`);
-        return parsedDate;
-      }
+  console.log(`=== PARSING DATE: "${dateString}" ===`);
+  
+  // Remove common prefixes and clean the string - more comprehensive
+  const cleanedDate = dateString
+    .replace(/^\s*(Dipublikasikan|Published|Tanggal|Date|Oleh|By|Posted|Diterbitkan|Terbit|Berita)[\s:]+/i, '')
+    .replace(/^\s*(pada|on|at|di|dalam)[\s:]+/i, '')
+    .replace(/^\s*(,|\-|\||–|—)\s*/g, '') // Remove leading separators
+    .replace(/\s+(WIB|WITA|WIT|GMT|UTC|\+\d{2}:\d{2}).*$/i, '') // Remove timezone info
+    .replace(/\s+pukul\s+\d{1,2}[:.].\d{2}.*$/i, '') // Remove time info like "pukul 14:30"
+    .replace(/\s+\d{1,2}[:.].\d{2}([:.].\d{2})?.*$/i, '') // Remove time info like "14:30:00"
+    .replace(/\s+jam\s+\d{1,2}[:.].\d{2}.*$/i, '') // Remove "jam 14:30"
+    .replace(/\s*\(\s*\d+\s*(hari|minggu|bulan|tahun)\s+.*?\)\s*/gi, '') // Remove relative dates in parentheses
+    .replace(/\s*-\s*\d+\s+(hari|minggu|bulan|tahun)\s+.*$/gi, '') // Remove "- 2 hari yang lalu" etc
+    .trim();
+  
+  console.log(`Cleaned date: "${cleanedDate}"`);
+  
+  try {
+    // Try standard ISO format first (YYYY-MM-DDTHH:mm:ss)
+    const isoDate = new Date(cleanedDate);
+    if (!isNaN(isoDate.getTime()) && (cleanedDate.includes('T') || cleanedDate.match(/^\d{4}-\d{2}-\d{2}/))) {
+      console.log(`Parsed as ISO date: ${isoDate.toISOString()}`);
+      return new Date(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate());
     }
     
-    // Also try to find date in nearby elements
-    const nearbyDate = articleElement.closest('.latest__item, .news-item, .post').find('date, .date, .latest__date').first();
-    if (nearbyDate.length) {
-      const dateText = nearbyDate.text().trim();
-      const parsedDate = parseIndonesianDate(dateText);
-      if (parsedDate) {
-        return parsedDate;
-      }
-    }
-  } else {
-    // Generic date extraction for other portals
-    const dateSelectors = [
-      '.post-date',
-      '.entry-date', 
-      '.published',
-      '.date',
-      'time',
-      '.meta-date',
-      '[datetime]'
+    // Enhanced patterns for Indonesian dates - prioritized by common usage
+    const patterns = [
+      // ISO format with timezone: "2024-01-15T10:30:00+07:00"
+      /(\d{4})-(\d{1,2})-(\d{1,2})T\d{2}:\d{2}:\d{2}/,
+      // ISO format: "2024-01-15" 
+      /(\d{4})-(\d{1,2})-(\d{1,2})$/,
+      // DD Bulan YYYY (e.g., "15 Januari 2024", "15 Jan 2024") - Most common Indonesian format
+      /(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+      // Long format like "Senin, 15 Januari 2024" or "Kamis, 15 Jan 2024"
+      /\w+,?\s+(\d{1,2})\s+(\w+)\s+(\d{4})/i,
+      // Format with time like "15 Januari 2024, 14:30"
+      /(\d{1,2})\s+(\w+)\s+(\d{4})[,\s]+\d{1,2}[:.].\d{2}/i,
+      // Bulan DD, YYYY (e.g., "Januari 15, 2024") - Less common but possible
+      /(\w+)\s+(\d{1,2}),?\s+(\d{4})/i,
+      // DD-MM-YYYY or DD/MM/YYYY (Indonesian format)
+      /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/,
+      // YYYY-MM-DD or YYYY/MM/DD (ISO format)
+      /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/,
     ];
     
-    for (const selector of dateSelectors) {
-      const dateElement = articleElement.find(selector).first();
-      if (dateElement.length) {
-        const dateText = dateElement.attr('datetime') || dateElement.text().trim();
-        const parsedDate = new Date(dateText);
-        if (!isNaN(parsedDate.getTime())) {
+    for (let i = 0; i < patterns.length; i++) {
+      const pattern = patterns[i];
+      const match = cleanedDate.match(pattern);
+      
+      if (match) {
+        console.log(`Matched pattern ${i + 1}: ${pattern}`);
+        console.log(`Match groups:`, match);
+        
+        let day: number, month: number, year: number;
+        
+        if (i === 0 || i === 1 || i === 7) {
+          // ISO format: YYYY-MM-DD
+          year = parseInt(match[1]);
+          month = parseInt(match[2]) - 1; // Convert to 0-based month
+          day = parseInt(match[3] || '1');
+        } else if (i === 2 || i === 3 || i === 4) {
+          // DD Month YYYY format
+          day = parseInt(match[1]);
+          const monthName = match[2].toLowerCase();
+          month = INDONESIAN_MONTHS[monthName];
+          year = parseInt(match[3]);
+        } else if (i === 5) {
+          // Month DD, YYYY format  
+          const monthName = match[1].toLowerCase();
+          month = INDONESIAN_MONTHS[monthName];
+          day = parseInt(match[2]);
+          year = parseInt(match[3]);
+        } else if (i === 6) {
+          // DD-MM-YYYY format
+          day = parseInt(match[1]);
+          month = parseInt(match[2]) - 1; // Convert to 0-based month
+          year = parseInt(match[3]);
+        } else {
+          continue;
+        }
+        
+        // Validate parsed values
+        if (month !== undefined && !isNaN(month) && month >= 0 && month <= 11 &&
+            !isNaN(day) && day >= 1 && day <= 31 &&
+            !isNaN(year) && year >= 2020 && year <= 2030) {
+          
+          const parsedDate = new Date(year, month, day);
+          console.log(`✅ Successfully parsed: ${parsedDate.toISOString()}`);
+          console.log(`   Day: ${day}, Month: ${month + 1} (${Object.keys(INDONESIAN_MONTHS)[month]}), Year: ${year}`);
           return parsedDate;
+        } else {
+          console.log(`❌ Invalid parsed values: day=${day}, month=${month}, year=${year}`);
         }
       }
     }
+    
+    console.log(`❌ No pattern matched for: "${cleanedDate}"`);
+    
+  } catch (error) {
+    console.error('Error in date parsing:', error);
   }
   
-  // Fallback to current date if no date found
-  console.warn('⚠️ No valid date found, using current date');
+  // Fallback to current date
+  console.log('⚠️ Using current date as fallback');
   return new Date();
+}
+
+// Antara News scraping function with specific selectors and logic
+async function scrapeAntaranews(
+  $: cheerio.CheerioAPI,
+  baseUrl: string, 
+  currentPage: number,
+  maxPages: number, 
+  delayMs: number,
+  keywords: string[],
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>,
+  axiosConfig: any
+): Promise<void> {
+  try {
+    console.log(`[ANTARA] Scraping page ${currentPage}: ${baseUrl}`);
+
+    // Find articles using Antara News specific selectors
+    const articleElements = $('.berita-title, a[href*="/berita/"]').toArray();
+    
+    if (articleElements.length === 0) {
+      console.log('[ANTARA] No articles found on page, trying alternative selectors...');
+      // Try alternative selectors for Antara News
+      const altElements = $('h2 a, h3 a, .post-title a, .entry-title a').toArray();
+      if (altElements.length === 0) {
+        console.log('[ANTARA] No articles found with any selector, stopping...');
+        return;
+      }
+      articleElements.push(...altElements);
+    }
+
+    console.log(`✓ [ANTARA] Found ${articleElements.length} articles on page ${currentPage}`);
+
+    for (const articleElement of articleElements) {
+      try {
+        const $article = $(articleElement);
+        
+        // Extract title and link for Antara News
+        let title: string, link: string;
+        
+        if ($article.hasClass('berita-title')) {
+          const linkElement = $article.find('a').first();
+          title = cleanTextContent($article.text());
+          link = linkElement.attr('href') || '';
+        } else if ($article.is('a[href*="/berita/"]')) {
+          title = cleanTextContent($article.text());
+          link = $article.attr('href') || '';
+        } else {
+          // Fallback for other elements
+          title = cleanTextContent($article.text());
+          link = $article.attr('href') || '';
+        }
+        
+        if (!title || !link || title.length < 10) {
+          continue;
+        }
+
+        // Convert relative link to absolute
+        const fullLink = link.startsWith('http') 
+          ? link 
+          : new URL(link, 'https://kalbar.antaranews.com').href;
+
+        // Check for duplicates
+        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
+          result.duplicates++;
+          continue;
+        }
+
+        // Check if title matches any keywords
+        const titleLower = title.toLowerCase();
+        const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
+
+        if (matchedKeywords.length === 0) {
+          continue; // Skip if no keywords match
+        }
+
+        // Find date - Antara News specific
+        let dateString = '';
+        const dateElement = $article.parent().find('time, .date, .post-date').first();
+        if (dateElement.length) {
+          dateString = dateElement.attr('datetime') || dateElement.text().trim();
+        }
+        
+        // If no date found in parent, look in nearby siblings
+        if (!dateString) {
+          const nearbyDate = $article.closest('div, article').find('time, .date, .post-date').first();
+          if (nearbyDate.length) {
+            dateString = nearbyDate.attr('datetime') || nearbyDate.text().trim();
+          }
+        }
+
+        // Parse date with our enhanced function
+        const parsedDate = parseIndonesianDate(dateString);
+
+        // Fetch full article content
+        let content = '';
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+          
+          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const $articlePage = cheerio.load(articleResponse.data);
+          
+          // Antara News content selectors
+          const contentSelectors = [
+            '.post-content',
+            '.entry-content',
+            '.article-content',
+            '.content',
+            'main p',
+            '.post-body p'
+          ];
+          
+          for (const selector of contentSelectors) {
+            const contentElement = $articlePage(selector).first();
+            if (contentElement.length) {
+              content = cleanTextContent(contentElement.text());
+              if (content.length > 100) break;
+            }
+          }
+          
+          if (!content) {
+            content = cleanTextContent($articlePage('p').text());
+          }
+          
+        } catch (contentError) {
+          console.warn(`[ANTARA] Failed to fetch content for ${fullLink}:`, contentError);
+          content = title; // Use title as fallback content
+        }
+
+        // Create news item
+        const newsItem: ScrapedNewsItem = {
+          title,
+          content: content || title,
+          link: fullLink,
+          date: parsedDate,
+          portal: baseUrl,
+          matchedKeywords,
+        };
+
+        // Save to database
+        try {
+          await saveScrapedArticle({
+            idBerita: crypto.randomUUID(),
+            portalBerita: baseUrl,
+            linkBerita: fullLink,
+            judul: title,
+            isi: content || title,
+            tanggalBerita: parsedDate,
+            matchedKeywords,
+          });
+          
+          // Update keyword match counts
+          const activeKeywords = await getActiveKeywords();
+          for (const keyword of matchedKeywords) {
+            const keywordObj = activeKeywords.find(k => 
+              (k.keyword as string).toLowerCase() === keyword
+            );
+            if (keywordObj?.id) {
+              await incrementKeywordMatchCount(keywordObj.id as string);
+            }
+          }
+
+          result.scrapedItems.push(newsItem);
+          result.newItems++;
+          
+          // Add to processed sets
+          processedUrls.add(fullLink.toLowerCase());
+          processedTitles.add(title.toLowerCase().trim());
+          
+          console.log(`✓ [ANTARA] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          
+        } catch (saveError) {
+          console.error('[ANTARA] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${title}`);
+        }
+
+      } catch (articleError) {
+        console.error('[ANTARA] Error processing article:', articleError);
+        result.errors.push(`Error processing article: ${articleError}`);
+      }
+    }
+
+    result.totalScraped += articleElements.length;
+
+  } catch (pageError) {
+    console.error(`[ANTARA] Error scraping page ${currentPage}:`, pageError);
+    result.errors.push(`Error on page ${currentPage}: ${pageError}`);
+  }
+}
+
+// Kalbar Online scraping function with specific selectors and logic
+async function scrapeKalbarOnline(
+  $: cheerio.CheerioAPI,
+  baseUrl: string, 
+  currentPage: number,
+  maxPages: number, 
+  delayMs: number,
+  keywords: string[],
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>,
+  axiosConfig: any
+): Promise<void> {
+  try {
+    console.log(`[KALBARONLINE] Scraping page ${currentPage}: ${baseUrl}`);
+
+    // Find articles using Kalbar Online specific selectors
+    const articleElements = $('h2.entry-title, .gmr-archive, .site-main-archive article').toArray();
+    
+    if (articleElements.length === 0) {
+      console.log('[KALBARONLINE] No articles found on page, trying alternative selectors...');
+      const altElements = $('.post, .entry, article, h2 a, h3 a').toArray();
+      if (altElements.length === 0) {
+        console.log('[KALBARONLINE] No articles found with any selector, stopping...');
+        return;
+      }
+      articleElements.push(...altElements);
+    }
+
+    console.log(`✓ [KALBARONLINE] Found ${articleElements.length} articles on page ${currentPage}`);
+
+    for (const articleElement of articleElements) {
+      try {
+        const $article = $(articleElement);
+        
+        // Extract title and link for Kalbar Online
+        let title: string, link: string;
+        
+        const titleElement = $article.find('h2.entry-title a, .entry-title a, h2 a, h3 a').first();
+        if (titleElement.length) {
+          title = cleanTextContent(titleElement.text());
+          link = titleElement.attr('href') || '';
+        } else if ($article.is('a')) {
+          title = cleanTextContent($article.text());
+          link = $article.attr('href') || '';
+        } else {
+          continue;
+        }
+        
+        if (!title || !link || title.length < 10) {
+          continue;
+        }
+
+        // Convert relative link to absolute
+        const fullLink = link.startsWith('http') 
+          ? link 
+          : new URL(link, 'https://kalbaronline.com').href;
+
+        // Check for duplicates
+        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
+          result.duplicates++;
+          continue;
+        }
+
+        // Check if title matches any keywords
+        const titleLower = title.toLowerCase();
+        const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
+
+        if (matchedKeywords.length === 0) {
+          continue; // Skip if no keywords match
+        }
+
+        // Find date - Kalbar Online specific (DD/MM/YYYY format)
+        let dateString = '';
+        const dateElement = $article.find('.gmr-metacontent, .entry-meta, .post-date, time').first();
+        if (dateElement.length) {
+          dateString = dateElement.attr('datetime') || dateElement.text().trim();
+        }
+        
+        // If no date found, look in parent container
+        if (!dateString) {
+          const nearbyDate = $article.closest('.gmr-archive, article, .post').find('.gmr-metacontent, .entry-meta, time').first();
+          if (nearbyDate.length) {
+            dateString = nearbyDate.attr('datetime') || nearbyDate.text().trim();
+          }
+        }
+
+        // Parse date with our enhanced function
+        const parsedDate = parseIndonesianDate(dateString);
+
+        // Fetch full article content
+        let content = '';
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+          
+          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const $articlePage = cheerio.load(articleResponse.data);
+          
+          // Kalbar Online content selectors
+          const contentSelectors = [
+            '.entry-content',
+            '.post-content',
+            '.article-content',
+            '.content',
+            'main p',
+            '.single-content p'
+          ];
+          
+          for (const selector of contentSelectors) {
+            const contentElement = $articlePage(selector).first();
+            if (contentElement.length) {
+              content = cleanTextContent(contentElement.text());
+              if (content.length > 100) break;
+            }
+          }
+          
+          if (!content) {
+            content = cleanTextContent($articlePage('p').text());
+          }
+          
+        } catch (contentError) {
+          console.warn(`[KALBARONLINE] Failed to fetch content for ${fullLink}:`, contentError);
+          content = title; // Use title as fallback content
+        }
+
+        // Create news item
+        const newsItem: ScrapedNewsItem = {
+          title,
+          content: content || title,
+          link: fullLink,
+          date: parsedDate,
+          portal: baseUrl,
+          matchedKeywords,
+        };
+
+        // Save to database
+        try {
+          await saveScrapedArticle({
+            idBerita: crypto.randomUUID(),
+            portalBerita: baseUrl,
+            linkBerita: fullLink,
+            judul: title,
+            isi: content || title,
+            tanggalBerita: parsedDate,
+            matchedKeywords,
+          });
+          
+          // Update keyword match counts
+          const activeKeywords = await getActiveKeywords();
+          for (const keyword of matchedKeywords) {
+            const keywordObj = activeKeywords.find(k => 
+              (k.keyword as string).toLowerCase() === keyword
+            );
+            if (keywordObj?.id) {
+              await incrementKeywordMatchCount(keywordObj.id as string);
+            }
+          }
+
+          result.scrapedItems.push(newsItem);
+          result.newItems++;
+          
+          // Add to processed sets
+          processedUrls.add(fullLink.toLowerCase());
+          processedTitles.add(title.toLowerCase().trim());
+          
+          console.log(`✓ [KALBARONLINE] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          
+        } catch (saveError) {
+          console.error('[KALBARONLINE] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${title}`);
+        }
+
+      } catch (articleError) {
+        console.error('[KALBARONLINE] Error processing article:', articleError);
+        result.errors.push(`Error processing article: ${articleError}`);
+      }
+    }
+
+    result.totalScraped += articleElements.length;
+
+  } catch (pageError) {
+    console.error(`[KALBARONLINE] Error scraping page ${currentPage}:`, pageError);
+    result.errors.push(`Error on page ${currentPage}: ${pageError}`);
+  }
+}
+
+// Suara Kalbar scraping function with specific selectors and logic
+async function scrapeSuaraKalbar(
+  $: cheerio.CheerioAPI,
+  baseUrl: string, 
+  currentPage: number,
+  maxPages: number, 
+  delayMs: number,
+  keywords: string[],
+  result: ScrapingResult,
+  processedUrls: Set<string>,
+  processedTitles: Set<string>,
+  axiosConfig: any
+): Promise<void> {
+  try {
+    console.log(`[SUARAKALBAR] Scraping page ${currentPage}: ${baseUrl}`);
+
+    // Find articles using Suara Kalbar specific selectors
+    const articleElements = $('.ray-main-post-title a, .post-title a, h2 a, h3 a').toArray();
+    
+    if (articleElements.length === 0) {
+      console.log('[SUARAKALBAR] No articles found on page, trying alternative selectors...');
+      const altElements = $('.post, .entry, article, a[href*=".co.id"]').toArray();
+      if (altElements.length === 0) {
+        console.log('[SUARAKALBAR] No articles found with any selector, stopping...');
+        return;
+      }
+      articleElements.push(...altElements);
+    }
+
+    console.log(`✓ [SUARAKALBAR] Found ${articleElements.length} articles on page ${currentPage}`);
+
+    for (const articleElement of articleElements) {
+      try {
+        const $article = $(articleElement);
+        
+        // Extract title and link for Suara Kalbar
+        let title: string, link: string;
+        
+        if ($article.is('a')) {
+          title = cleanTextContent($article.text());
+          link = $article.attr('href') || '';
+        } else {
+          const linkElement = $article.find('a').first();
+          title = cleanTextContent($article.text());
+          link = linkElement.attr('href') || '';
+        }
+        
+        if (!title || !link || title.length < 10) {
+          continue;
+        }
+
+        // Convert relative link to absolute
+        const fullLink = link.startsWith('http') 
+          ? link 
+          : new URL(link, 'https://www.suarakalbar.co.id').href;
+
+        // Check for duplicates
+        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
+          result.duplicates++;
+          continue;
+        }
+
+        // Check if title matches any keywords
+        const titleLower = title.toLowerCase();
+        const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
+
+        if (matchedKeywords.length === 0) {
+          continue; // Skip if no keywords match
+        }
+
+        // Find date - Suara Kalbar specific (Indonesian long format)
+        let dateString = '';
+        // Look for date in nearby span or div elements
+        const dateElement = $article.parent().find('span, .date, time').first();
+        if (dateElement.length) {
+          const dateText = dateElement.text().trim();
+          // Check if this looks like a date
+          if (dateText.match(/(\d{1,2})\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|sep|okt|nov|des)\s+(\d{4})/i) ||
+              dateText.match(/(senin|selasa|rabu|kamis|jumat|sabtu|minggu)/i)) {
+            dateString = dateText;
+          }
+        }
+        
+        // If no date found, look in article container
+        if (!dateString) {
+          const nearbyDate = $article.closest('div, article').find('span, .date, time').first();
+          if (nearbyDate.length) {
+            const dateText = nearbyDate.text().trim();
+            if (dateText.match(/(\d{1,2})\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)/i)) {
+              dateString = dateText;
+            }
+          }
+        }
+
+        // Parse date with our enhanced function
+        const parsedDate = parseIndonesianDate(dateString);
+
+        // Fetch full article content
+        let content = '';
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+          
+          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const $articlePage = cheerio.load(articleResponse.data);
+          
+          // Suara Kalbar content selectors
+          const contentSelectors = [
+            '.entry-content',
+            '.post-content',
+            '.article-content',
+            '.content',
+            'main p',
+            '.single-content p'
+          ];
+          
+          for (const selector of contentSelectors) {
+            const contentElement = $articlePage(selector).first();
+            if (contentElement.length) {
+              content = cleanTextContent(contentElement.text());
+              if (content.length > 100) break;
+            }
+          }
+          
+          if (!content) {
+            content = cleanTextContent($articlePage('p').text());
+          }
+          
+        } catch (contentError) {
+          console.warn(`[SUARAKALBAR] Failed to fetch content for ${fullLink}:`, contentError);
+          content = title; // Use title as fallback content
+        }
+
+        // Create news item
+        const newsItem: ScrapedNewsItem = {
+          title,
+          content: content || title,
+          link: fullLink,
+          date: parsedDate,
+          portal: baseUrl,
+          matchedKeywords,
+        };
+
+        // Save to database
+        try {
+          await saveScrapedArticle({
+            idBerita: crypto.randomUUID(),
+            portalBerita: baseUrl,
+            linkBerita: fullLink,
+            judul: title,
+            isi: content || title,
+            tanggalBerita: parsedDate,
+            matchedKeywords,
+          });
+          
+          // Update keyword match counts
+          const activeKeywords = await getActiveKeywords();
+          for (const keyword of matchedKeywords) {
+            const keywordObj = activeKeywords.find(k => 
+              (k.keyword as string).toLowerCase() === keyword
+            );
+            if (keywordObj?.id) {
+              await incrementKeywordMatchCount(keywordObj.id as string);
+            }
+          }
+
+          result.scrapedItems.push(newsItem);
+          result.newItems++;
+          
+          // Add to processed sets
+          processedUrls.add(fullLink.toLowerCase());
+          processedTitles.add(title.toLowerCase().trim());
+          
+          console.log(`✓ [SUARAKALBAR] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          
+        } catch (saveError) {
+          console.error('[SUARAKALBAR] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${title}`);
+        }
+
+      } catch (articleError) {
+        console.error('[SUARAKALBAR] Error processing article:', articleError);
+        result.errors.push(`Error processing article: ${articleError}`);
+      }
+    }
+
+    result.totalScraped += articleElements.length;
+
+  } catch (pageError) {
+    console.error(`[SUARAKALBAR] Error scraping page ${currentPage}:`, pageError);
+    result.errors.push(`Error on page ${currentPage}: ${pageError}`);
+  }
 }
 
 // Helper function to clean and extract text content
@@ -216,17 +818,28 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
       axiosConfig.timeout = 45000;
     }
 
+    // Route to portal-specific scraping functions (Pontianak Post uses Chromium, so skip it here)
+    if (portalUrl.includes('pontianakpost')) {
+      throw new Error('Pontianak Post should use Chromium scraping, not Axios. Please select the Chromium scraping engine.');
+    }
+
     for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
       try {
-        console.log(`Scraping page ${currentPage}...`);
+        console.log(`[AXIOS] Scraping page ${currentPage}...`);
         
         // Construct page URL with portal-specific logic
         let pageUrl: string;
-        if (portalUrl.includes('pontianakpost')) {
-          // Pontianak Post uses different pagination structure
-          pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}?page=${currentPage}`;
+        if (portalUrl.includes('antaranews')) {
+          // Antara News pagination: kalbar/{page-number}
+          pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/${currentPage}`;
+        } else if (portalUrl.includes('kalbaronline')) {
+          // Kalbar Online pagination: /page/{page-number}
+          pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/page/${currentPage}`;
+        } else if (portalUrl.includes('suarakalbar')) {
+          // Suara Kalbar pagination: /page/{page-number}
+          pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/page/${currentPage}`;
         } else {
-          // Generic pagination for other portals
+          // Generic pagination
           pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/page/${currentPage}`;
         }
         
@@ -274,208 +887,26 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
 
         const $ = cheerio.load(response!.data);
         
-        // Extract articles from the page - add selectors specific to different portals
-        let articles: any[] = [];
-        
-        if (portalUrl.includes('pontianakpost')) {
-          // Specific selectors for Pontianak Post based on actual HTML structure
-          articles = $('h2.latest__title').toArray();
+        // Route to specific portal scraping function
+        if (portalUrl.includes('antaranews')) {
+          await scrapeAntaranews($, portalUrl, currentPage, maxPages, delayMs, keywordList, result, processedUrls, processedTitles, axiosConfig);
         } else if (portalUrl.includes('kalbaronline')) {
-          // Specific selectors for Kalbar Online
-          articles = $('.post, .entry, .news-item, article').toArray();
-        } else if (portalUrl.includes('antaranews')) {
-          // Specific selectors for Antara News
-          articles = $('.simple-post, .post, article, .news-item').toArray();
+          await scrapeKalbarOnline($, portalUrl, currentPage, maxPages, delayMs, keywordList, result, processedUrls, processedTitles, axiosConfig);
+        } else if (portalUrl.includes('suarakalbar')) {
+          await scrapeSuaraKalbar($, portalUrl, currentPage, maxPages, delayMs, keywordList, result, processedUrls, processedTitles, axiosConfig);
         } else {
-          // Generic selectors
-          articles = $('.post, .entry, article, .news-item').toArray();
-        }
-        
-        if (articles.length === 0) {
-          // Debug: log page structure for troubleshooting
-          if (portalUrl.includes('pontianakpost')) {
-            console.log(`Debug: Pontianak Post - No articles found. Page structure sample:`, 
-              $('body').find('*[class*="post"], *[class*="item"], *[class*="article"], *[id*="post"]').length > 0
-                ? 'Found potential post elements'
-                : 'No post elements found'
-            );
-            
-            // Try alternative selectors for debugging
-            const altSelectors = [
-              'div[class*="post"]', 'div[class*="item"]', 'div[class*="news"]',
-              'h2', 'h3', '.title', '*[href*="/"]'
-            ];
-            
-            for (const selector of altSelectors) {
-              const count = $(selector).length;
-              if (count > 0) {
-                console.log(`Debug: Found ${count} elements with selector: ${selector}`);
-              }
-            }
-          }
-          
-          console.log(`No articles found on page ${currentPage}, stopping...`);
+          console.warn(`[AXIOS] Unknown portal: ${portalUrl}, skipping...`);
           break;
         }
 
-        console.log(`Found ${articles.length} articles on page ${currentPage}`);
-
-        for (const articleElement of articles) {
-          try {
-            const $article = $(articleElement);
-            
-            // Extract article data with portal-specific selectors
-            let title: string, relativeLink: string;
-            
-            if (portalUrl.includes('pontianakpost')) {
-              // For Pontianak Post, $article is already the h2.latest__title element
-              const linkElement = $article.find('a.latest__link').first();
-              if (!linkElement.length) {
-                continue;
-              }
-              
-              title = cleanTextContent(linkElement.text());
-              relativeLink = linkElement.attr('href') || '';
-            } else {
-              // For other portals, use generic approach
-              const titleElement = $article.find('h1, h2, h3, .entry-title, .post-title, .title').first();
-              const linkElement = $article.find('a').first();
-              
-              if (!titleElement.length || !linkElement.length) {
-                continue;
-              }
-              
-              title = cleanTextContent(titleElement.text());
-              relativeLink = linkElement.attr('href') || '';
-            }
-            
-            if (!title || !relativeLink) {
-              continue;
-            }
-
-            // Convert relative link to absolute
-            const link = relativeLink.startsWith('http') 
-              ? relativeLink 
-              : new URL(relativeLink, portalUrl).href;
-
-            // Check for duplicates
-            if (await checkDuplicateArticle(title, link, processedUrls, processedTitles)) {
-              result.duplicates++;
-              continue;
-            }
-
-            // Check if title matches any keywords
-            const titleLower = title.toLowerCase();
-            const matchedKeywords = keywordList.filter(keyword => 
-              titleLower.includes(keyword)
-            );
-
-            if (matchedKeywords.length === 0) {
-              continue; // Skip if no keywords match
-            }
-
-            // Fetch full article content with delay
-            let content = '';
-            try {
-              // Small delay before fetching article content
-              await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-              
-              const articleResponse = await axios.get(link, axiosConfig);
-              const $articlePage = cheerio.load(articleResponse.data);
-              
-              // Try different content selectors
-              const contentSelectors = [
-                '.entry-content',
-                '.post-content', 
-                '.article-content',
-                '.content',
-                'main',
-                '.single-content'
-              ];
-              
-              for (const selector of contentSelectors) {
-                const contentElement = $articlePage(selector).first();
-                if (contentElement.length) {
-                  content = cleanTextContent(contentElement.text());
-                  break;
-                }
-              }
-              
-              // Fallback: get text from common paragraph containers
-              if (!content) {
-                content = cleanTextContent($articlePage('p').text());
-              }
-              
-            } catch (contentError) {
-              console.warn(`Failed to fetch content for ${link}:`, contentError);
-              content = title; // Use title as fallback content
-            }
-
-            // Extract date with portal-specific logic
-            const date = extractArticleDate($, $article, portalUrl);
-
-            // Create news item
-            const newsItem: ScrapedNewsItem = {
-              title,
-              content: content || title,
-              link,
-              date,
-              portal: portalUrl,
-              matchedKeywords,
-            };
-
-            // Save to database
-            try {
-              await saveScrapedArticle({
-                idBerita: crypto.randomUUID(),
-                portalBerita: portalUrl,
-                linkBerita: link,
-                judul: title,
-                isi: content || title,
-                tanggalBerita: date,
-                matchedKeywords,
-              });
-              
-              // Update keyword match counts
-              for (const keyword of matchedKeywords) {
-                const keywordObj = activeKeywords.find(k => 
-                  (k.keyword as string).toLowerCase() === keyword
-                );
-                if (keywordObj?.id) {
-                  await incrementKeywordMatchCount(keywordObj.id as string);
-                }
-              }
-
-              result.scrapedItems.push(newsItem);
-              result.newItems++;
-              
-              // Add to processed sets
-              processedUrls.add(link.toLowerCase());
-              processedTitles.add(title.toLowerCase().trim());
-              
-              console.log(`✓ Scraped: ${title} (Keywords: ${matchedKeywords.join(', ')})`);
-              
-            } catch (saveError) {
-              console.error('Error saving article:', saveError);
-              result.errors.push(`Failed to save article: ${title}`);
-            }
-
-          } catch (articleError) {
-            console.error('Error processing article:', articleError);
-            result.errors.push(`Error processing article: ${articleError}`);
-          }
-        }
-
-        result.totalScraped += articles.length;
-
         // Add delay between pages
         if (currentPage < maxPages && delayMs > 0) {
-          console.log(`Waiting ${delayMs}ms before next page...`);
+          console.log(`[AXIOS] Waiting ${delayMs}ms before next page...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
 
       } catch (pageError) {
-        console.error(`Error scraping page ${currentPage}:`, pageError);
+        console.error(`[AXIOS] Error scraping page ${currentPage}:`, pageError);
         result.errors.push(`Error on page ${currentPage}: ${pageError}`);
         
         // Continue with next page instead of breaking
@@ -484,10 +915,10 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
     }
 
     result.success = true;
-    console.log(`Scraping completed. New items: ${result.newItems}, Duplicates: ${result.duplicates}`);
+    console.log(`[AXIOS] Scraping completed. Total: ${result.totalScraped}, New: ${result.newItems}, Duplicates: ${result.duplicates}`);
 
   } catch (error) {
-    console.error('Scraping failed:', error);
+    console.error('[AXIOS] Scraping failed:', error);
     result.errors.push(`Scraping failed: ${error}`);
   }
 
