@@ -1,4 +1,5 @@
 import * as cron from 'node-cron';
+import CronExpressionParser from 'cron-parser';
 import { supabase } from '@/lib/supabase';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
 
@@ -153,22 +154,25 @@ class SchedulerService {
     }
   }
 
-  private getNextRunTime(_cronExpression: string): Date {
+  private getNextRunTime(cronExpression: string): Date {
     try {
-      // Parse cron expression and calculate next run
-      // This is a simplified version - in production you might want to use a more robust cron parser
-      const now = new Date();
+      // Parse cron expression with Asia/Jakarta timezone
+      const options = {
+        currentDate: new Date(),
+        tz: 'Asia/Jakarta'
+      };
       
-      // For now, add 24 hours as a fallback
-      // In a real implementation, you'd parse the cron expression properly
-      const nextRun = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const interval = CronExpressionParser.parse(cronExpression, options);
+      const nextRun = interval.next().toDate();
       
       return nextRun;
     } catch (error) {
       console.error('Error calculating next run time:', error);
-      // Fallback: add 24 hours
+      // Fallback: add 24 hours and log the error
       const now = new Date();
-      return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const fallbackTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      console.warn(`Using fallback next run time (${fallbackTime.toISOString()}) for invalid cron: ${cronExpression}`);
+      return fallbackTime;
     }
   }
 
