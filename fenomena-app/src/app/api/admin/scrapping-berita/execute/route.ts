@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
+import { scrapeNewsFromPortalChromium } from '@/lib/scraping-service-chromium';
 import { z } from 'zod';
 
 // Allowed portals
@@ -21,6 +22,7 @@ const executeScrapingSchema = z.object({
   ),
   maxPages: z.number().min(1).max(200).optional().default(10),
   delayMs: z.number().min(1000).max(10000).optional().default(2000),
+  scrapingEngine: z.enum(['axios', 'chromium']).optional().default('axios'),
 });
 
 // POST /api/admin/scrapping-berita/execute - Execute scraping process
@@ -38,14 +40,59 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { portalUrl, maxPages, delayMs } = validationResult.data;
+    const { portalUrl, maxPages, delayMs, scrapingEngine } = validationResult.data;
 
-    // Execute scraping (this will be implemented in scraping-service)
-    const scrapingResult = await scrapeNewsFromPortal({
-      portalUrl,
-      maxPages,
-      delayMs,
-    });
+    // Validate chromium usage
+    if (scrapingEngine === 'chromium') {
+      // Check if we're in development environment
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      
+      if (!isDevelopment) {
+        return NextResponse.json({
+          error: 'Chromium scraping is only available in development mode',
+          details: 'Chromium scraping requires puppeteer which is not available in production deployment. Please use Axios scraping for production or run this in localhost.',
+        }, { status: 400 });
+      }
+      
+      // Check if Pontianak Post
+      if (!portalUrl.includes('pontianakpost.jawapos.com')) {
+        return NextResponse.json({
+          error: 'Chromium scraping is only supported for Pontianak Post',
+          details: 'Please use Axios scraping for other portals.',
+        }, { status: 400 });
+      }
+    }
+
+    let scrapingResult;
+    
+    try {
+      // Execute scraping based on engine
+      if (scrapingEngine === 'chromium') {
+        console.log(`[API] Using Chromium scraping for ${portalUrl}`);
+        scrapingResult = await scrapeNewsFromPortalChromium({
+          portalUrl,
+          maxPages,
+          delayMs,
+        });
+      } else {
+        console.log(`[API] Using Axios scraping for ${portalUrl}`);
+        scrapingResult = await scrapeNewsFromPortal({
+          portalUrl,
+          maxPages,
+          delayMs,
+        });
+      }
+    } catch (importError: any) {
+      // Handle case where chromium dependencies are not available
+      if (scrapingEngine === 'chromium' && importError.message?.includes('puppeteer')) {
+        return NextResponse.json({
+          error: 'Chromium dependencies not available',
+          details: 'Puppeteer is not installed or available in this environment. Please install playwright/puppeteer or use Axios scraping.',
+          suggestion: 'Run "npm install puppeteer" to enable chromium scraping in development.',
+        }, { status: 503 });
+      }
+      throw importError; // Re-throw other errors
+    }
 
     return NextResponse.json({
       message: 'Scraping executed successfully',

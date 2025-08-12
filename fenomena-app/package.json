@@ -37,10 +37,12 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
+    "@types/puppeteer": "^5.4.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.4.2",
+    "puppeteer": "^24.16.1",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "^5"

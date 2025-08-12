@@ -41,6 +41,7 @@ export default function ScrappingBeritaPage() {
     portalUrl: 'https://pontianakpost.jawapos.com/daerah',
     maxPages: 5,
     delayMs: 2000,
+    scrapingEngine: 'axios',
   });
 
   // Available portals for dropdown
@@ -48,22 +49,32 @@ export default function ScrappingBeritaPage() {
     {
       name: 'Pontianak Post',
       url: 'https://pontianakpost.jawapos.com/daerah',
+      engine: 'axios',
       description: 'Portal berita daerah Pontianak Post'
     },
     {
       name: 'Kalbar Online',
       url: 'https://kalbaronline.com/berita-daerah/',
+      engine: 'axios',
       description: 'Portal berita daerah Kalbar Online'
     },
     {
       name: 'Antara News Kalbar',
       url: 'https://kalbar.antaranews.com/kalbar',
+      engine: 'axios',
       description: 'Portal berita Antara News Kalimantan Barat'
     },
     {
       name: 'Suara Kalbar',
       url: 'https://www.suarakalbar.co.id/category/kalbar/',
+      engine: 'axios',
       description: 'Portal berita daerah Suara Kalbar'
+    },
+    {
+      name: 'Chromium - Pontianak Post',
+      url: 'https://pontianakpost.jawapos.com/daerah',
+      engine: 'chromium',
+      description: 'Manual scraping dengan browser real untuk Pontianak Post (localhost only)'
     }
   ];
 
@@ -322,19 +333,23 @@ export default function ScrappingBeritaPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Portal</label>
                 <select
-                  value={scrapingConfig.portalUrl}
-                  onChange={(e) => setScrapingConfig({ ...scrapingConfig, portalUrl: e.target.value })}
+                  value={`${scrapingConfig.portalUrl}|${scrapingConfig.scrapingEngine}`}
+                  onChange={(e) => {
+                    const [url, engine] = e.target.value.split('|');
+                    setScrapingConfig({ ...scrapingConfig, portalUrl: url, scrapingEngine: engine });
+                  }}
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   disabled={scraping}
                 >
                   {availablePortals.map((portal, index) => (
-                    <option key={index} value={portal.url}>
+                    <option key={index} value={`${portal.url}|${portal.engine}`}>
                       {portal.name} - {portal.description}
                     </option>
                   ))}
                 </select>
                 <p className="mt-1 text-sm text-gray-500">
-                  Selected: {availablePortals.find(p => p.url === scrapingConfig.portalUrl)?.url}
+                  Selected: {availablePortals.find(p => p.url === scrapingConfig.portalUrl && p.engine === scrapingConfig.scrapingEngine)?.name} 
+                  ({scrapingConfig.scrapingEngine.toUpperCase()})
                 </p>
               </div>
               
