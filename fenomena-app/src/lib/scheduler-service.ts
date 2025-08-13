@@ -25,12 +25,27 @@ class SchedulerService {
   private scheduledJobs: Map<string, ScheduledJob> = new Map();
   private isInitialized = false;
 
+  // Environment detection
+  private get isVercel() {
+    return process.env.VERCEL === '1';
+  }
+
+  private get isProduction() {
+    return process.env.NODE_ENV === 'production';
+  }
+
+  private get shouldUseInMemoryCron() {
+    // Use in-memory cron jobs only in development or non-Vercel environments
+    return !this.isVercel;
+  }
+
   async initialize() {
     if (this.isInitialized) {
       return;
     }
 
     console.log('🕒 Initializing Scheduler Service...');
+    console.log(`🌍 Environment: Vercel=${this.isVercel}, Production=${this.isProduction}`);
     
     try {
       // Load all active schedules from database
@@ -45,9 +60,22 @@ class SchedulerService {
 
       console.log(`📋 Found ${activeSchedules.length} active schedules`);
 
-      // Create cron jobs for each active schedule
-      for (const schedule of activeSchedules) {
-        await this.createCronJob(schedule as any);
+      if (this.shouldUseInMemoryCron) {
+        // Create cron jobs for each active schedule (development/local only)
+        console.log('🔧 Creating in-memory cron jobs for development environment');
+        for (const schedule of activeSchedules) {
+          await this.createCronJob(schedule as any);
+        }
+      } else {
+        // Vercel environment - only update next run times, no in-memory cron jobs
+        console.log('☁️ Vercel environment detected - skipping in-memory cron jobs');
+        for (const schedule of activeSchedules) {
+          const nextRun = this.getNextRunTime(schedule.cronSchedule as string);
+          await supabase
+            .from('scrapping_schedules')
+            .update({ nextRun: nextRun.toISOString() })
+            .eq('id', schedule.id);
+        }
       }
 
       this.isInitialized = true;
@@ -382,6 +410,66 @@ class SchedulerService {
       return schedules;
     } catch (error) {
       console.error('❌ Failed to get schedules:', error);
+      throw error;
+    }
+  }
+
+  // Method for Vercel cron jobs - execute all due schedules
+  async executeAllDueSchedules() {
+    console.log('🚀 [VERCEL CRON] Checking for due schedules...');
+    
+    try {
+      const currentTime = new Date();
+      
+      // Get all active schedules that are due for execution
+      const { data: schedules, error } = await supabase
+        .from('scrapping_schedules')
+        .select('*')
+        .eq('isActive', true);
+
+      if (error) {
+        throw new Error(`Failed to load schedules: ${error.message}`);
+      }
+
+      console.log(`📋 [VERCEL CRON] Found ${schedules.length} active schedules to check`);
+
+      const executedSchedules = [];
+      
+      for (const schedule of schedules) {
+        try {
+          // Check if schedule is due for execution
+          const nextRun = new Date(schedule.nextRun);
+          const isDue = nextRun <= currentTime;
+          
+          console.log(`⏰ [VERCEL CRON] Schedule "${schedule.name}": Next run ${nextRun.toISOString()}, Due: ${isDue}`);
+          
+          if (isDue) {
+            console.log(`🎯 [VERCEL CRON] Executing due schedule: ${schedule.name}`);
+            await this.executeScheduledScraping(schedule.id);
+            executedSchedules.push({
+              id: schedule.id,
+              name: schedule.name,
+              executedAt: currentTime.toISOString()
+            });
+          }
+        } catch (scheduleError) {
+          console.error(`❌ [VERCEL CRON] Error processing schedule ${schedule.name}:`, scheduleError);
+          // Continue with other schedules even if one fails
+        }
+      }
+
+      console.log(`✅ [VERCEL CRON] Execution complete. Processed ${executedSchedules.length} due schedules`);
+      
+      return {
+        success: true,
+        executedCount: executedSchedules.length,
+        totalChecked: schedules.length,
+        executedSchedules,
+        timestamp: currentTime.toISOString()
+      };
+      
+    } catch (error) {
+      console.error('❌ [VERCEL CRON] Failed to execute due schedules:', error);
       throw error;
     }
   }

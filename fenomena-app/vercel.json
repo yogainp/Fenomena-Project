@@ -3,5 +3,11 @@
     "pages/api/**/*.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/execute-scheduled-scraping",
+      "schedule": "0 */2 * * *"
+    }
+  ]
 }
