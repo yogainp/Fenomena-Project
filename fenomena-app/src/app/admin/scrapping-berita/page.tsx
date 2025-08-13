@@ -416,7 +416,7 @@ export default function ScrappingBeritaPage() {
                       {(item.judul || '').length > 60 ? `${(item.judul || '').substring(0, 60)}...` : (item.judul || 'No title')}
                     </h4>
                     <p className="text-xs text-gray-500 mb-2">
-                      {item.portalBerita || 'Unknown source'} • {item.tanggalScrap ? new Date(item.tanggalScrap).toLocaleDateString() : 'Unknown date'}
+                      {item.portalBerita || 'Unknown source'} • {item.tanggalScrap ? new Date(item.tanggalScrap).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' }) : 'Unknown date'}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {Array.isArray(item.matchedKeywords) && item.matchedKeywords.length > 0 ? (

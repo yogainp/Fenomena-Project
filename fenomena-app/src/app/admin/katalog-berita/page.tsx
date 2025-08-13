@@ -184,6 +184,7 @@ export default function KatalogBeritaPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       year: 'numeric',
       month: 'short',
       day: 'numeric',

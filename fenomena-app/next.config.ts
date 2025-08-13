@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   env: {
     PORT: '3000',
   },
+  // Note: instrumentation.ts is enabled by default in Next.js 15
   // Disable ESLint during build for deployment
   eslint: {
     ignoreDuringBuilds: true,

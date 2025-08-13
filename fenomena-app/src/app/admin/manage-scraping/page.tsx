@@ -262,9 +262,30 @@ export default function ManageScrapingPage() {
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString('id-ID');
-    } catch {
-      return 'N/A';
+      if (!dateString) return 'N/A';
+      
+      // Create date object from the ISO string
+      const date = new Date(dateString);
+      
+      // Ensure we have a valid date
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      
+      // Format with explicit Indonesia timezone - FIXED VERSION
+      return new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(date);
+    } catch (error) {
+      console.error('formatDate error:', error, 'for input:', dateString);
+      return 'Error';
     }
   };
 
@@ -607,7 +628,7 @@ export default function ManageScrapingPage() {
                         {schedule.lastRun ? formatDate(schedule.lastRun) : 'Never'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {schedule.nextRun ? formatDate(schedule.nextRun) : 'Not scheduled'}
+                        {schedule.nextRun ? formatDate(schedule.nextRun) : 'Not scheduled'} {/* Updated timezone format */}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

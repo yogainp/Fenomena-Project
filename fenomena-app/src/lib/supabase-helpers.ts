@@ -1,6 +1,14 @@
 // Supabase helper functions for common database operations
 import { supabase } from './supabase';
 
+// Helper function to get current time in Indonesia timezone
+function getCurrentIndonesiaTime(): string {
+  // Create date in Indonesia timezone (UTC+7)
+  const now = new Date();
+  const indonesiaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // Add 7 hours for UTC+7
+  return indonesiaTime.toISOString();
+}
+
 export async function saveScrapedArticle(articleData: {
   idBerita: string;
   portalBerita: string;
@@ -20,6 +28,7 @@ export async function saveScrapedArticle(articleData: {
       judul: articleData.judul,
       isi: articleData.isi,
       tanggalBerita: articleData.tanggalBerita.toISOString(),
+      tanggalScrap: getCurrentIndonesiaTime(), // Add missing tanggalScrap field with Indonesia timezone
       matchedKeywords: articleData.matchedKeywords,
     })
     .select()

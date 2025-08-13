@@ -209,6 +209,9 @@ async function scrapeAntaranews(
 
     console.log(`✓ [ANTARA] Found ${articleElements.length} articles on page ${currentPage}`);
 
+    // Step 1: Extract all articles and check keywords FIRST
+    const relevantArticles: Array<{title: string, link: string, dateString: string, matchedKeywords: string[]}> = [];
+
     for (const articleElement of articleElements) {
       try {
         const $article = $(articleElement);
@@ -238,18 +241,12 @@ async function scrapeAntaranews(
           ? link 
           : new URL(link, 'https://kalbar.antaranews.com').href;
 
-        // Check for duplicates
-        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
-          result.duplicates++;
-          continue;
-        }
-
-        // Check if title matches any keywords
+        // Step 2: Check if title matches any keywords BEFORE duplicate check
         const titleLower = title.toLowerCase();
         const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
 
         if (matchedKeywords.length === 0) {
-          continue; // Skip if no keywords match
+          continue; // Skip if no keywords match - don't even process further
         }
 
         // Find date - Antara News specific
@@ -267,15 +264,44 @@ async function scrapeAntaranews(
           }
         }
 
+        // Add to relevant articles for processing
+        relevantArticles.push({
+          title,
+          link: fullLink,
+          dateString,
+          matchedKeywords
+        });
+
+      } catch (articleError) {
+        console.error('[ANTARA] Error extracting article info:', articleError);
+        continue;
+      }
+    }
+
+    console.log(`📊 [ANTARA] From ${articleElements.length} articles on page ${currentPage}, found ${relevantArticles.length} articles matching keywords`);
+
+    // Step 3: Process relevant articles (check duplicates, fetch content, save)
+    for (const article of relevantArticles) {
+      try {
+        console.log(`🔍 [ANTARA] Processing: "${article.title.substring(0, 60)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
+
+        // Check for duplicates AFTER keyword filtering
+        if (await checkDuplicateArticle(article.title, article.link, processedUrls, processedTitles)) {
+          console.log(`⚠️ [ANTARA] Duplicate found, skipping: "${article.title.substring(0, 40)}..."`);
+          result.duplicates++;
+          continue;
+        }
+
         // Parse date with our enhanced function
-        const parsedDate = parseIndonesianDate(dateString);
+        const parsedDate = parseIndonesianDate(article.dateString);
 
         // Fetch full article content
         let content = '';
         try {
+          console.log(`📥 [ANTARA] Fetching content from: ${article.link}`);
           await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
           
-          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const articleResponse = await axios.get(article.link, axiosConfig);
           const $articlePage = cheerio.load(articleResponse.data);
           
           // Antara News content selectors
@@ -292,27 +318,31 @@ async function scrapeAntaranews(
             const contentElement = $articlePage(selector).first();
             if (contentElement.length) {
               content = cleanTextContent(contentElement.text());
-              if (content.length > 100) break;
+              if (content.length > 100) {
+                console.log(`✅ [ANTARA] Content extracted using selector: ${selector} (${content.length} chars)`);
+                break;
+              }
             }
           }
           
           if (!content) {
             content = cleanTextContent($articlePage('p').text());
+            console.log(`⚠️ [ANTARA] Using fallback paragraph content (${content.length} chars)`);
           }
           
         } catch (contentError) {
-          console.warn(`[ANTARA] Failed to fetch content for ${fullLink}:`, contentError);
-          content = title; // Use title as fallback content
+          console.warn(`❌ [ANTARA] Failed to fetch content for ${article.link}:`, contentError);
+          content = article.title; // Use title as fallback content
         }
 
         // Create news item
         const newsItem: ScrapedNewsItem = {
-          title,
-          content: content || title,
-          link: fullLink,
+          title: article.title,
+          content: content || article.title,
+          link: article.link,
           date: parsedDate,
           portal: baseUrl,
-          matchedKeywords,
+          matchedKeywords: article.matchedKeywords,
         };
 
         // Save to database
@@ -320,16 +350,16 @@ async function scrapeAntaranews(
           await saveScrapedArticle({
             idBerita: crypto.randomUUID(),
             portalBerita: baseUrl,
-            linkBerita: fullLink,
-            judul: title,
-            isi: content || title,
+            linkBerita: article.link,
+            judul: article.title,
+            isi: content || article.title,
             tanggalBerita: parsedDate,
-            matchedKeywords,
+            matchedKeywords: article.matchedKeywords,
           });
           
           // Update keyword match counts
           const activeKeywords = await getActiveKeywords();
-          for (const keyword of matchedKeywords) {
+          for (const keyword of article.matchedKeywords) {
             const keywordObj = activeKeywords.find(k => 
               (k.keyword as string).toLowerCase() === keyword
             );
@@ -342,26 +372,27 @@ async function scrapeAntaranews(
           result.newItems++;
           
           // Add to processed sets
-          processedUrls.add(fullLink.toLowerCase());
-          processedTitles.add(title.toLowerCase().trim());
+          processedUrls.add(article.link.toLowerCase());
+          processedTitles.add(article.title.toLowerCase().trim());
           
-          console.log(`✓ [ANTARA] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          console.log(`✅ [ANTARA] Successfully scraped: "${article.title.substring(0, 50)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
           
         } catch (saveError) {
-          console.error('[ANTARA] Error saving article:', saveError);
-          result.errors.push(`Failed to save article: ${title}`);
+          console.error('❌ [ANTARA] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${article.title}`);
         }
 
       } catch (articleError) {
-        console.error('[ANTARA] Error processing article:', articleError);
-        result.errors.push(`Error processing article: ${articleError}`);
+        console.error('❌ [ANTARA] Error processing relevant article:', articleError);
+        result.errors.push(`Error processing article: ${article.title}`);
       }
     }
 
     result.totalScraped += articleElements.length;
+    console.log(`📈 [ANTARA] Page ${currentPage} summary: ${articleElements.length} total articles, ${relevantArticles.length} keyword matches, ${result.newItems} saved, ${result.duplicates} duplicates`);
 
   } catch (pageError) {
-    console.error(`[ANTARA] Error scraping page ${currentPage}:`, pageError);
+    console.error(`❌ [ANTARA] Error scraping page ${currentPage}:`, pageError);
     result.errors.push(`Error on page ${currentPage}: ${pageError}`);
   }
 }
@@ -397,6 +428,9 @@ async function scrapeKalbarOnline(
 
     console.log(`✓ [KALBARONLINE] Found ${articleElements.length} articles on page ${currentPage}`);
 
+    // Step 1: Extract all articles and check keywords FIRST
+    const relevantArticles: Array<{title: string, link: string, dateString: string, matchedKeywords: string[]}> = [];
+
     for (const articleElement of articleElements) {
       try {
         const $article = $(articleElement);
@@ -424,18 +458,12 @@ async function scrapeKalbarOnline(
           ? link 
           : new URL(link, 'https://kalbaronline.com').href;
 
-        // Check for duplicates
-        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
-          result.duplicates++;
-          continue;
-        }
-
-        // Check if title matches any keywords
+        // Step 2: Check if title matches any keywords BEFORE duplicate check
         const titleLower = title.toLowerCase();
         const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
 
         if (matchedKeywords.length === 0) {
-          continue; // Skip if no keywords match
+          continue; // Skip if no keywords match - don't even process further
         }
 
         // Find date - Kalbar Online specific (DD/MM/YYYY format)
@@ -453,15 +481,44 @@ async function scrapeKalbarOnline(
           }
         }
 
+        // Add to relevant articles for processing
+        relevantArticles.push({
+          title,
+          link: fullLink,
+          dateString,
+          matchedKeywords
+        });
+
+      } catch (articleError) {
+        console.error('[KALBARONLINE] Error extracting article info:', articleError);
+        continue;
+      }
+    }
+
+    console.log(`📊 [KALBARONLINE] From ${articleElements.length} articles on page ${currentPage}, found ${relevantArticles.length} articles matching keywords`);
+
+    // Step 3: Process relevant articles (check duplicates, fetch content, save)
+    for (const article of relevantArticles) {
+      try {
+        console.log(`🔍 [KALBARONLINE] Processing: "${article.title.substring(0, 60)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
+
+        // Check for duplicates AFTER keyword filtering
+        if (await checkDuplicateArticle(article.title, article.link, processedUrls, processedTitles)) {
+          console.log(`⚠️ [KALBARONLINE] Duplicate found, skipping: "${article.title.substring(0, 40)}..."`);
+          result.duplicates++;
+          continue;
+        }
+
         // Parse date with our enhanced function
-        const parsedDate = parseIndonesianDate(dateString);
+        const parsedDate = parseIndonesianDate(article.dateString);
 
         // Fetch full article content
         let content = '';
         try {
+          console.log(`📥 [KALBARONLINE] Fetching content from: ${article.link}`);
           await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
           
-          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const articleResponse = await axios.get(article.link, axiosConfig);
           const $articlePage = cheerio.load(articleResponse.data);
           
           // Kalbar Online content selectors
@@ -478,27 +535,31 @@ async function scrapeKalbarOnline(
             const contentElement = $articlePage(selector).first();
             if (contentElement.length) {
               content = cleanTextContent(contentElement.text());
-              if (content.length > 100) break;
+              if (content.length > 100) {
+                console.log(`✅ [KALBARONLINE] Content extracted using selector: ${selector} (${content.length} chars)`);
+                break;
+              }
             }
           }
           
           if (!content) {
             content = cleanTextContent($articlePage('p').text());
+            console.log(`⚠️ [KALBARONLINE] Using fallback paragraph content (${content.length} chars)`);
           }
           
         } catch (contentError) {
-          console.warn(`[KALBARONLINE] Failed to fetch content for ${fullLink}:`, contentError);
-          content = title; // Use title as fallback content
+          console.warn(`❌ [KALBARONLINE] Failed to fetch content for ${article.link}:`, contentError);
+          content = article.title; // Use title as fallback content
         }
 
         // Create news item
         const newsItem: ScrapedNewsItem = {
-          title,
-          content: content || title,
-          link: fullLink,
+          title: article.title,
+          content: content || article.title,
+          link: article.link,
           date: parsedDate,
           portal: baseUrl,
-          matchedKeywords,
+          matchedKeywords: article.matchedKeywords,
         };
 
         // Save to database
@@ -506,16 +567,16 @@ async function scrapeKalbarOnline(
           await saveScrapedArticle({
             idBerita: crypto.randomUUID(),
             portalBerita: baseUrl,
-            linkBerita: fullLink,
-            judul: title,
-            isi: content || title,
+            linkBerita: article.link,
+            judul: article.title,
+            isi: content || article.title,
             tanggalBerita: parsedDate,
-            matchedKeywords,
+            matchedKeywords: article.matchedKeywords,
           });
           
           // Update keyword match counts
           const activeKeywords = await getActiveKeywords();
-          for (const keyword of matchedKeywords) {
+          for (const keyword of article.matchedKeywords) {
             const keywordObj = activeKeywords.find(k => 
               (k.keyword as string).toLowerCase() === keyword
             );
@@ -528,26 +589,27 @@ async function scrapeKalbarOnline(
           result.newItems++;
           
           // Add to processed sets
-          processedUrls.add(fullLink.toLowerCase());
-          processedTitles.add(title.toLowerCase().trim());
+          processedUrls.add(article.link.toLowerCase());
+          processedTitles.add(article.title.toLowerCase().trim());
           
-          console.log(`✓ [KALBARONLINE] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          console.log(`✅ [KALBARONLINE] Successfully scraped: "${article.title.substring(0, 50)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
           
         } catch (saveError) {
-          console.error('[KALBARONLINE] Error saving article:', saveError);
-          result.errors.push(`Failed to save article: ${title}`);
+          console.error('❌ [KALBARONLINE] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${article.title}`);
         }
 
       } catch (articleError) {
-        console.error('[KALBARONLINE] Error processing article:', articleError);
-        result.errors.push(`Error processing article: ${articleError}`);
+        console.error('❌ [KALBARONLINE] Error processing relevant article:', articleError);
+        result.errors.push(`Error processing article: ${article.title}`);
       }
     }
 
     result.totalScraped += articleElements.length;
+    console.log(`📈 [KALBARONLINE] Page ${currentPage} summary: ${articleElements.length} total articles, ${relevantArticles.length} keyword matches, ${result.newItems} saved, ${result.duplicates} duplicates`);
 
   } catch (pageError) {
-    console.error(`[KALBARONLINE] Error scraping page ${currentPage}:`, pageError);
+    console.error(`❌ [KALBARONLINE] Error scraping page ${currentPage}:`, pageError);
     result.errors.push(`Error on page ${currentPage}: ${pageError}`);
   }
 }
@@ -583,6 +645,9 @@ async function scrapeSuaraKalbar(
 
     console.log(`✓ [SUARAKALBAR] Found ${articleElements.length} articles on page ${currentPage}`);
 
+    // Step 1: Extract all articles and check keywords FIRST
+    const relevantArticles: Array<{title: string, link: string, dateString: string, matchedKeywords: string[]}> = [];
+
     for (const articleElement of articleElements) {
       try {
         const $article = $(articleElement);
@@ -608,18 +673,12 @@ async function scrapeSuaraKalbar(
           ? link 
           : new URL(link, 'https://www.suarakalbar.co.id').href;
 
-        // Check for duplicates
-        if (await checkDuplicateArticle(title, fullLink, processedUrls, processedTitles)) {
-          result.duplicates++;
-          continue;
-        }
-
-        // Check if title matches any keywords
+        // Step 2: Check if title matches any keywords BEFORE duplicate check
         const titleLower = title.toLowerCase();
         const matchedKeywords = keywords.filter(keyword => titleLower.includes(keyword));
 
         if (matchedKeywords.length === 0) {
-          continue; // Skip if no keywords match
+          continue; // Skip if no keywords match - don't even process further
         }
 
         // Find date - Suara Kalbar specific (Indonesian long format)
@@ -646,15 +705,44 @@ async function scrapeSuaraKalbar(
           }
         }
 
+        // Add to relevant articles for processing
+        relevantArticles.push({
+          title,
+          link: fullLink,
+          dateString,
+          matchedKeywords
+        });
+
+      } catch (articleError) {
+        console.error('[SUARAKALBAR] Error extracting article info:', articleError);
+        continue;
+      }
+    }
+
+    console.log(`📊 [SUARAKALBAR] From ${articleElements.length} articles on page ${currentPage}, found ${relevantArticles.length} articles matching keywords`);
+
+    // Step 3: Process relevant articles (check duplicates, fetch content, save)
+    for (const article of relevantArticles) {
+      try {
+        console.log(`🔍 [SUARAKALBAR] Processing: "${article.title.substring(0, 60)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
+
+        // Check for duplicates AFTER keyword filtering
+        if (await checkDuplicateArticle(article.title, article.link, processedUrls, processedTitles)) {
+          console.log(`⚠️ [SUARAKALBAR] Duplicate found, skipping: "${article.title.substring(0, 40)}..."`);
+          result.duplicates++;
+          continue;
+        }
+
         // Parse date with our enhanced function
-        const parsedDate = parseIndonesianDate(dateString);
+        const parsedDate = parseIndonesianDate(article.dateString);
 
         // Fetch full article content
         let content = '';
         try {
+          console.log(`📥 [SUARAKALBAR] Fetching content from: ${article.link}`);
           await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
           
-          const articleResponse = await axios.get(fullLink, axiosConfig);
+          const articleResponse = await axios.get(article.link, axiosConfig);
           const $articlePage = cheerio.load(articleResponse.data);
           
           // Suara Kalbar content selectors
@@ -671,27 +759,31 @@ async function scrapeSuaraKalbar(
             const contentElement = $articlePage(selector).first();
             if (contentElement.length) {
               content = cleanTextContent(contentElement.text());
-              if (content.length > 100) break;
+              if (content.length > 100) {
+                console.log(`✅ [SUARAKALBAR] Content extracted using selector: ${selector} (${content.length} chars)`);
+                break;
+              }
             }
           }
           
           if (!content) {
             content = cleanTextContent($articlePage('p').text());
+            console.log(`⚠️ [SUARAKALBAR] Using fallback paragraph content (${content.length} chars)`);
           }
           
         } catch (contentError) {
-          console.warn(`[SUARAKALBAR] Failed to fetch content for ${fullLink}:`, contentError);
-          content = title; // Use title as fallback content
+          console.warn(`❌ [SUARAKALBAR] Failed to fetch content for ${article.link}:`, contentError);
+          content = article.title; // Use title as fallback content
         }
 
         // Create news item
         const newsItem: ScrapedNewsItem = {
-          title,
-          content: content || title,
-          link: fullLink,
+          title: article.title,
+          content: content || article.title,
+          link: article.link,
           date: parsedDate,
           portal: baseUrl,
-          matchedKeywords,
+          matchedKeywords: article.matchedKeywords,
         };
 
         // Save to database
@@ -699,16 +791,16 @@ async function scrapeSuaraKalbar(
           await saveScrapedArticle({
             idBerita: crypto.randomUUID(),
             portalBerita: baseUrl,
-            linkBerita: fullLink,
-            judul: title,
-            isi: content || title,
+            linkBerita: article.link,
+            judul: article.title,
+            isi: content || article.title,
             tanggalBerita: parsedDate,
-            matchedKeywords,
+            matchedKeywords: article.matchedKeywords,
           });
           
           // Update keyword match counts
           const activeKeywords = await getActiveKeywords();
-          for (const keyword of matchedKeywords) {
+          for (const keyword of article.matchedKeywords) {
             const keywordObj = activeKeywords.find(k => 
               (k.keyword as string).toLowerCase() === keyword
             );
@@ -721,26 +813,27 @@ async function scrapeSuaraKalbar(
           result.newItems++;
           
           // Add to processed sets
-          processedUrls.add(fullLink.toLowerCase());
-          processedTitles.add(title.toLowerCase().trim());
+          processedUrls.add(article.link.toLowerCase());
+          processedTitles.add(article.title.toLowerCase().trim());
           
-          console.log(`✓ [SUARAKALBAR] Scraped: ${title.substring(0, 50)}... (Keywords: ${matchedKeywords.join(', ')})`);
+          console.log(`✅ [SUARAKALBAR] Successfully scraped: "${article.title.substring(0, 50)}..." (Keywords: ${article.matchedKeywords.join(', ')})`);
           
         } catch (saveError) {
-          console.error('[SUARAKALBAR] Error saving article:', saveError);
-          result.errors.push(`Failed to save article: ${title}`);
+          console.error('❌ [SUARAKALBAR] Error saving article:', saveError);
+          result.errors.push(`Failed to save article: ${article.title}`);
         }
 
       } catch (articleError) {
-        console.error('[SUARAKALBAR] Error processing article:', articleError);
-        result.errors.push(`Error processing article: ${articleError}`);
+        console.error('❌ [SUARAKALBAR] Error processing relevant article:', articleError);
+        result.errors.push(`Error processing article: ${article.title}`);
       }
     }
 
     result.totalScraped += articleElements.length;
+    console.log(`📈 [SUARAKALBAR] Page ${currentPage} summary: ${articleElements.length} total articles, ${relevantArticles.length} keyword matches, ${result.newItems} saved, ${result.duplicates} duplicates`);
 
   } catch (pageError) {
-    console.error(`[SUARAKALBAR] Error scraping page ${currentPage}:`, pageError);
+    console.error(`❌ [SUARAKALBAR] Error scraping page ${currentPage}:`, pageError);
     result.errors.push(`Error on page ${currentPage}: ${pageError}`);
   }
 }

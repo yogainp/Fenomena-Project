@@ -3,6 +3,19 @@ import CronExpressionParser from 'cron-parser';
 import { supabase } from '@/lib/supabase';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
 
+// Helper function to get current time in Indonesia timezone
+function getCurrentIndonesiaTime(): Date {
+  // Get current UTC time
+  return new Date();
+}
+
+// Helper function to format current time as ISO string (UTC)
+function getCurrentIndonesiaTimeISO(): string {
+  // Return current time as UTC ISO string
+  // The frontend will handle conversion to Indonesia timezone for display
+  return new Date().toISOString();
+}
+
 interface ScheduledJob {
   id: string;
   task: cron.ScheduledTask;
@@ -102,14 +115,13 @@ class SchedulerService {
         return;
       }
 
-      // Update lastRun and nextRun
-      const now = new Date();
+      // Update lastRun and nextRun with Indonesia timezone
       const nextRun = this.getNextRunTime(schedule.cronSchedule as string);
       
       const { error: updateError } = await supabase
         .from('scrapping_schedules')
         .update({ 
-          lastRun: now.toISOString(),
+          lastRun: getCurrentIndonesiaTimeISO(), // Use Indonesia timezone for lastRun
           nextRun: nextRun.toISOString()
         })
         .eq('id', scheduleId);
@@ -147,7 +159,7 @@ class SchedulerService {
       await supabase
         .from('scrapping_schedules')
         .update({ 
-          lastRun: new Date().toISOString(),
+          lastRun: getCurrentIndonesiaTimeISO(), // Use Indonesia timezone for error case too
           nextRun: this.getNextRunTime((scheduleForCron?.cronSchedule as string) || '0 0 * * *').toISOString()
         })
         .eq('id', scheduleId);
@@ -158,20 +170,31 @@ class SchedulerService {
     try {
       // Parse cron expression with Asia/Jakarta timezone
       const options = {
-        currentDate: new Date(),
-        tz: 'Asia/Jakarta'
+        currentDate: new Date(), // Use current UTC time as base
+        tz: 'Asia/Jakarta'        // Let cron-parser handle the timezone conversion
       };
       
       const interval = CronExpressionParser.parse(cronExpression, options);
       const nextRun = interval.next().toDate();
       
+      // Log both UTC and Indonesia time for debugging
+      const indonesiaTimeStr = nextRun.toLocaleString('id-ID', { 
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit', 
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      console.log(`⏰ [SCHEDULER] Next run calculated: ${nextRun.toISOString()} UTC (${indonesiaTimeStr} Jakarta)`);
       return nextRun;
     } catch (error) {
-      console.error('Error calculating next run time:', error);
-      // Fallback: add 24 hours and log the error
-      const now = new Date();
-      const fallbackTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      console.warn(`Using fallback next run time (${fallbackTime.toISOString()}) for invalid cron: ${cronExpression}`);
+      console.error('❌ [SCHEDULER] Error calculating next run time:', error);
+      // Fallback: add 24 hours to current time
+      const fallbackTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      console.warn(`⚠️ [SCHEDULER] Using fallback next run time (${fallbackTime.toISOString()}) for invalid cron: ${cronExpression}`);
       return fallbackTime;
     }
   }
