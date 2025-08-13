@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { scrapeNewsFromPortal } from '@/lib/scraping-service';
 import { z } from 'zod';
@@ -8,7 +8,8 @@ import { z } from 'zod';
 const ALLOWED_PORTALS = [
   'https://pontianakpost.jawapos.com/daerah',
   'https://kalbaronline.com/berita-daerah/',
-  'https://kalbar.antaranews.com/kalbar'
+  'https://kalbar.antaranews.com/kalbar',
+  'https://www.suarakalbar.co.id/category/kalbar/'
 ];
 
 const executeScrapingSchema = z.object({
@@ -20,6 +21,7 @@ const executeScrapingSchema = z.object({
   ),
   maxPages: z.number().min(1).max(200).optional().default(10),
   delayMs: z.number().min(1000).max(10000).optional().default(2000),
+  scrapingEngine: z.enum(['axios', 'chromium']).optional().default('axios'),
 });
 
 // POST /api/admin/scrapping-berita/execute - Execute scraping process
@@ -33,18 +35,72 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
-    const { portalUrl, maxPages, delayMs } = validationResult.data;
+    const { portalUrl, maxPages, delayMs, scrapingEngine } = validationResult.data;
 
-    // Execute scraping (this will be implemented in scraping-service)
-    const scrapingResult = await scrapeNewsFromPortal({
-      portalUrl,
-      maxPages,
-      delayMs,
-    });
+    // Validate chromium usage
+    if (scrapingEngine === 'chromium') {
+      // Check if we're in development environment
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      
+      if (!isDevelopment) {
+        return NextResponse.json({
+          error: 'Chromium scraping is only available in development mode',
+          details: 'Chromium scraping requires puppeteer which is not available in production deployment. Please use Axios scraping for production or run this in localhost.',
+        }, { status: 400 });
+      }
+      
+      // Check if Pontianak Post
+      if (!portalUrl.includes('pontianakpost.jawapos.com')) {
+        return NextResponse.json({
+          error: 'Chromium scraping is only supported for Pontianak Post',
+          details: 'Please use Axios scraping for other portals.',
+        }, { status: 400 });
+      }
+    }
+
+    let scrapingResult;
+    
+    try {
+      // Execute scraping based on engine
+      if (scrapingEngine === 'chromium') {
+        console.log(`[API] Using Chromium scraping for ${portalUrl}`);
+        
+        try {
+          // Dynamic import to avoid bundling chromium dependencies in production
+          const { scrapeNewsFromPortalChromium } = await import('@/lib/scraping-service-chromium');
+          scrapingResult = await scrapeNewsFromPortalChromium({
+            portalUrl,
+            maxPages,
+            delayMs,
+          });
+        } catch (dynamicImportError: any) {
+          console.error('[API] Failed to load chromium scraping service:', dynamicImportError);
+          return NextResponse.json({
+            error: 'Chromium scraping service unavailable',
+            details: 'Failed to load chromium dependencies. This usually happens in production environments where puppeteer is not available.',
+            suggestion: 'Use Axios scraping instead, or ensure you are running in development mode with puppeteer installed.',
+          }, { status: 503 });
+        }
+      } else {
+        console.log(`[API] Using Axios scraping for ${portalUrl}`);
+        scrapingResult = await scrapeNewsFromPortal({
+          portalUrl,
+          maxPages,
+          delayMs,
+        });
+      }
+    } catch (executionError: any) {
+      // Handle execution errors
+      console.error('[API] Scraping execution error:', executionError);
+      return NextResponse.json({
+        error: 'Scraping execution failed',
+        details: executionError.message || 'An error occurred during scraping execution.',
+      }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: 'Scraping executed successfully',
@@ -81,55 +137,58 @@ export async function GET(request: NextRequest) {
     let activeKeywords = 0;
     
     try {
-      totalNews = await prisma.scrappingBerita.count();
+      const { count } = await supabase
+        .from('scrapping_berita')
+        .select('*', { count: 'exact', head: true });
+      totalNews = count || 0;
       console.log('✓ Total news:', totalNews);
     } catch (err) {
       console.error('Error getting total news:', err);
     }
     
     try {
-      todayNews = await prisma.scrappingBerita.count({
-        where: {
-          tanggalScrap: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
-        },
-      });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('scrapping_berita')
+        .select('*', { count: 'exact', head: true })
+        .gte('tanggalScrap', today.toISOString());
+      todayNews = count || 0;
       console.log('✓ Today news:', todayNews);
     } catch (err) {
       console.error('Error getting today news:', err);
     }
     
     try {
-      totalKeywords = await prisma.scrappingKeyword.count();
+      const { count } = await supabase
+        .from('scrapping_keywords')
+        .select('*', { count: 'exact', head: true });
+      totalKeywords = count || 0;
       console.log('✓ Total keywords:', totalKeywords);
     } catch (err) {
       console.error('Error getting total keywords:', err);
     }
     
     try {
-      activeKeywords = await prisma.scrappingKeyword.count({
-        where: { isActive: true },
-      });
+      const { count } = await supabase
+        .from('scrapping_keywords')
+        .select('*', { count: 'exact', head: true })
+        .eq('isActive', true);
+      activeKeywords = count || 0;
       console.log('✓ Active keywords:', activeKeywords);
     } catch (err) {
       console.error('Error getting active keywords:', err);
     }
 
     // Get recent scraping activity
-    let recentNews = [];
+    let recentNews: any[] = [];
     try {
-      recentNews = await prisma.scrappingBerita.findMany({
-        select: {
-          id: true,
-          judul: true,
-          portalBerita: true,
-          tanggalScrap: true,
-          matchedKeywords: true,
-        },
-        orderBy: { tanggalScrap: 'desc' },
-        take: 10,
-      });
+      const { data } = await supabase
+        .from('scrapping_berita')
+        .select('id, judul, portalBerita, tanggalScrap, matchedKeywords')
+        .order('tanggalScrap', { ascending: false })
+        .limit(10);
+      recentNews = data || [];
       console.log('✓ Recent news:', recentNews.length);
     } catch (err) {
       console.error('Error getting recent news:', err);

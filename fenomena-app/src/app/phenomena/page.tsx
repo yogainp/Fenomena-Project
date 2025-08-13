@@ -30,58 +30,69 @@ interface Category {
   description: string;
 }
 
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
 
-interface Region {
-  id: string;
-  province: string;
-  city: string;
-  regionCode: string;
+interface ApiResponse {
+  phenomena: Phenomenon[];
+  pagination: PaginationInfo;
 }
 
 
 export default function PhenomenaPage() {
   const [phenomena, setPhenomena] = useState<Phenomenon[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false,
+  });
   
   // Filter state
   const [filters, setFilters] = useState({
     categoryId: '',
     startDate: '',
     endDate: '',
-    regionId: '',
     search: '',
   });
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchInitialData();
   }, []);
 
   useEffect(() => {
+    setCurrentPage(1);
     fetchPhenomena();
-  }, [filters]);
+  }, [filters, itemsPerPage]);
+
+  useEffect(() => {
+    fetchPhenomena();
+  }, [currentPage]);
 
   const fetchInitialData = async () => {
     try {
       setLoading(true);
       
-      const [categoriesRes, regionsRes] = await Promise.all([
-        fetch('/api/categories'),
-        fetch('/api/regions'),
-      ]);
+      const categoriesRes = await fetch('/api/categories');
       
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json();
         setCategories(categoriesData);
-      }
-      
-      
-      if (regionsRes.ok) {
-        const regionsData = await regionsRes.json();
-        setRegions(regionsData.regions || []);
       }
       
       await fetchPhenomena();
@@ -94,19 +105,30 @@ export default function PhenomenaPage() {
 
   const fetchPhenomena = async () => {
     try {
-      // Fetch phenomena with filters
+      // Fetch phenomena with filters and pagination
       const params = new URLSearchParams();
       if (filters.categoryId) params.append('categoryId', filters.categoryId);
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
-      if (filters.regionId) params.append('regionId', filters.regionId);
       if (filters.search) params.append('search', filters.search);
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+      params.append('context', 'management'); // Indicate this is for management context
       
       const phenomenaRes = await fetch(`/api/phenomena?${params.toString()}`);
 
       if (phenomenaRes.ok) {
-        const phenomenaData = await phenomenaRes.json();
-        setPhenomena(phenomenaData);
+        const phenomenaData: ApiResponse = await phenomenaRes.json();
+        // Handle new paginated response format
+        if (phenomenaData.phenomena && phenomenaData.pagination) {
+          setPhenomena(phenomenaData.phenomena);
+          setPagination(phenomenaData.pagination);
+        } else if (Array.isArray(phenomenaData)) {
+          // Fallback for old API response format
+          setPhenomena(phenomenaData);
+        } else {
+          setPhenomena([]);
+        }
       }
     } catch (error) {
       setError('Failed to load phenomena');
@@ -173,7 +195,7 @@ export default function PhenomenaPage() {
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <h2 className="text-lg font-semibold mb-4">Filter Fenomena</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Kategori Survei
@@ -213,23 +235,7 @@ export default function PhenomenaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Wilayah
-              </label>
-              <select
-                value={filters.regionId}
-                onChange={(e) => setFilters({ ...filters, regionId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Semua Wilayah</option>
-                {regions?.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.city} - {region.province}
-                  </option>
-                )) || []}
-              </select>
-            </div>
+            {/* Region filter removed for regular users since API filters by user's region automatically */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Pencarian
@@ -247,8 +253,27 @@ export default function PhenomenaPage() {
 
         {/* Phenomena List */}
         <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold">Daftar Fenomena ({phenomena?.length || 0})</h2>
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-lg font-semibold">
+              Daftar Fenomena ({phenomena?.length || 0} dari {pagination.total} - Halaman {pagination.page} dari {pagination.totalPages})
+            </h2>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">
+                Tampilkan per halaman:
+              </label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
           <div className="divide-y divide-gray-200">
             {!phenomena || phenomena.length === 0 ? (
@@ -294,6 +319,46 @@ export default function PhenomenaPage() {
             )}
           </div>
         </div>
+
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="mt-6 flex justify-center items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={!pagination.hasPrev}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Sebelumnya
+            </button>
+            
+            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+              const pageNum = Math.max(1, Math.min(pagination.totalPages - 4, currentPage - 2)) + i;
+              if (pageNum > pagination.totalPages) return null;
+              
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-2 border rounded-md text-sm font-medium ${
+                    pageNum === currentPage
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={!pagination.hasNext}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Selanjutnya →
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

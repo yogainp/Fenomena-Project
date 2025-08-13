@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireRole } from '@/lib/middleware';
+import { supabase } from '@/lib/supabase';
+import { verifyToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireRole(request, 'ADMIN');
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
     
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -13,77 +28,54 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('categoryId') || '';
     const regionId = searchParams.get('regionId') || '';
     
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
     
-    // Build where conditions
-    const whereConditions: any = {};
+    // Build Supabase query
+    let query = supabase
+      .from('catatan_survei')
+      .select(`
+        *,
+        region:regions(id, province, city, regionCode),
+        category:survey_categories(id, name, description),
+        user:users(id, username)
+      `, { count: 'exact' });
     
+    // Apply filters
     if (search) {
-      whereConditions.catatan = {
-        contains: search,
-        mode: 'insensitive'
-      };
+      query = query.ilike('catatan', `%${search}%`);
     }
     
     if (categoryId) {
-      whereConditions.categoryId = categoryId;
+      query = query.eq('categoryId', categoryId);
     }
     
     if (regionId) {
-      whereConditions.regionId = regionId;
+      query = query.eq('regionId', regionId);
     }
     
-    // Since this is admin-only, show all data
-    
-    const [catatanSurvei, totalCount] = await Promise.all([
-      prisma.catatanSurvei.findMany({
-        where: whereConditions,
-        include: {
-          region: {
-            select: {
-              id: true,
-              province: true,
-              city: true,
-              regionCode: true,
-            },
-          },
-          category: {
-            select: {
-              id: true,
-              name: true,
-              description: true,
-            },
-          },
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
-          },
-        },
-        orderBy: [
-          {
-            nomorResponden: 'asc',
-          },
-          {
-            createdAt: 'desc',
-          },
-        ],
-        skip,
-        take: limit,
-      }),
-      prisma.catatanSurvei.count({
-        where: whereConditions,
-      }),
-    ]);
+    // Apply pagination and ordering
+    query = query
+      .order('nomorResponden', { ascending: true })
+      .order('createdAt', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data: catatanSurvei, count: totalCount, error } = await query;
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
+    }
     
     return NextResponse.json({
-      data: catatanSurvei,
+      data: catatanSurvei || [],
       pagination: {
         page,
         limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit),
+        totalCount: totalCount || 0,
+        totalPages: Math.ceil((totalCount || 0) / limit),
       },
     });
     
@@ -98,9 +90,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = requireRole(request, 'ADMIN');
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     const body = await request.json();
-    
     const { catatan, regionId, categoryId, nomorResponden } = body;
     
     // Validate required fields
@@ -121,11 +128,13 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate region exists
-    const region = await prisma.region.findUnique({
-      where: { id: regionId },
-    });
+    const { data: region, error: regionError } = await supabase
+      .from('regions')
+      .select('id')
+      .eq('id', regionId)
+      .single();
     
-    if (!region) {
+    if (regionError || !region) {
       return NextResponse.json(
         { error: 'Region tidak ditemukan' },
         { status: 400 }
@@ -133,55 +142,49 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate category exists
-    const category = await prisma.surveyCategory.findUnique({
-      where: { id: categoryId },
-    });
+    const { data: category, error: categoryError } = await supabase
+      .from('survey_categories')
+      .select('id')
+      .eq('id', categoryId)
+      .single();
     
-    if (!category) {
+    if (categoryError || !category) {
       return NextResponse.json(
         { error: 'Kategori tidak ditemukan' },
         { status: 400 }
       );
     }
     
-    // Admin can add to any region
-    
     // Generate respondenId (without periodId)
     const respondenId = `${categoryId}-${nomorRespondenInt}`;
     
-    const catatanSurvei = await prisma.catatanSurvei.create({
-      data: {
+    // Insert catatan survei
+    const { data: catatanSurvei, error: insertError } = await supabase
+      .from('catatan_survei')
+      .insert({
+        id: crypto.randomUUID(),
         nomorResponden: nomorRespondenInt,
         respondenId,
         catatan,
         regionId,
         categoryId,
         userId: user.userId,
-      },
-      include: {
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        category: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            username: true,
-          },
-        },
-      },
-    });
+      })
+      .select(`
+        *,
+        region:regions(id, province, city, regionCode),
+        category:survey_categories(id, name, description),
+        user:users(id, username)
+      `)
+      .single();
+
+    if (insertError) {
+      console.error('Insert catatan survei error:', insertError);
+      return NextResponse.json({ 
+        error: 'Failed to create catatan survei',
+        details: insertError.message 
+      }, { status: 500 });
+    }
     
     return NextResponse.json(catatanSurvei, { status: 201 });
     

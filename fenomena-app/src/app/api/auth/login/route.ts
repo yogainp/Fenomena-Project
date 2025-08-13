@@ -22,10 +22,10 @@ export async function POST(request: NextRequest) {
     }
 
     const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      regionId: user.regionId,
+      userId: user.id as string,
+      email: user.email as string,
+      role: user.role as string,
+      regionId: user.regionId as string | undefined,
     });
 
     const response = NextResponse.json(
@@ -46,17 +46,18 @@ export async function POST(request: NextRequest) {
     // Set HTTP-only cookie for security
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to false for development (localhost)
       sameSite: 'lax', // Changed from 'strict' to 'lax' for better browser compatibility
       maxAge: 86400, // 24 hours
       path: '/',
+      domain: undefined, // Let browser set domain automatically
     });
 
     return response;
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }

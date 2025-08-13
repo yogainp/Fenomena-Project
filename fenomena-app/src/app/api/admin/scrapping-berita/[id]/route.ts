@@ -1,35 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 
 // GET /api/admin/scrapping-berita/[id] - Get single news item
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
-    const berita = await prisma.scrappingBerita.findUnique({
-      where: { id: params.id },
-      include: {
-        analysisResults: {
-          select: {
-            id: true,
-            analysisType: true,
-            results: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
+    const { data: berita, error } = await supabase
+      .from('scrapping_berita')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!berita) {
+    if (error || !berita) {
       return NextResponse.json({ error: 'News not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ berita });
+    // Get analysis results for this berita
+    const { data: analysisResults, error: analysisError } = await supabase
+      .from('analysis_results')
+      .select('*')
+      .eq('scrappingBeritaId', id)
+      .order('createdAt', { ascending: false });
+
+    // If there's an error fetching analysis results, just log it but don't fail the request
+    if (analysisError) {
+      console.warn('Failed to fetch analysis results:', analysisError);
+    }
+
+    return NextResponse.json({ 
+      berita: {
+        ...berita,
+        analysisResults: analysisResults || []
+      }
+    });
 
   } catch (error: any) {
     console.error('Get berita error:', error);
@@ -43,24 +52,33 @@ export async function GET(
 // DELETE /api/admin/scrapping-berita/[id] - Delete single news item
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     // Check if news exists
-    const existingBerita = await prisma.scrappingBerita.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingBerita, error: findError } = await supabase
+      .from('scrapping_berita')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (!existingBerita) {
+    if (findError || !existingBerita) {
       return NextResponse.json({ error: 'News not found' }, { status: 404 });
     }
 
-    // Delete news (this will also cascade delete analysis results)
-    await prisma.scrappingBerita.delete({
-      where: { id: params.id },
-    });
+    // Delete news
+    const { error: deleteError } = await supabase
+      .from('scrapping_berita')
+      .delete()
+      .eq('id', id);
+      
+    if (deleteError) {
+      console.error('Error deleting berita:', deleteError);
+      throw deleteError;
+    }
 
     return NextResponse.json({
       message: 'News deleted successfully',

@@ -1,81 +1,159 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/middleware';
+import { supabase } from '@/lib/supabase';
+import { verifyToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     // Get query parameters for filtering
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
     const regionId = searchParams.get('regionId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const customKeywordsParam = searchParams.get('customKeywords');
 
-    // Build filter conditions
-    const whereConditions: any = {};
+    // Build base query for data
+    let query = supabase
+      .from('catatan_survei')
+      .select(`
+        id,
+        catatan,
+        createdAt,
+        category:survey_categories(id, name),
+        region:regions(id, province, city, regionCode),
+        user:users(id, username)
+      `);
+
+    // Build count query for total records
+    let countQuery = supabase
+      .from('catatan_survei')
+      .select('*', { count: 'exact', head: true });
+
+    // Apply filters to both queries
     if (categoryId && categoryId !== 'all') {
-      whereConditions.categoryId = categoryId;
+      query = query.eq('categoryId', categoryId);
+      countQuery = countQuery.eq('categoryId', categoryId);
     }
     if (regionId && regionId !== 'all') {
-      whereConditions.regionId = regionId;
+      query = query.eq('regionId', regionId);
+      countQuery = countQuery.eq('regionId', regionId);
     }
-    if (startDate || endDate) {
-      whereConditions.createdAt = {};
-      if (startDate) {
-        whereConditions.createdAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereConditions.createdAt.lte = new Date(endDate + 'T23:59:59.999Z');
-      }
+    if (startDate) {
+      query = query.gte('createdAt', startDate);
+      countQuery = countQuery.gte('createdAt', startDate);
+    }
+    if (endDate) {
+      query = query.lte('createdAt', endDate + 'T23:59:59.999Z');
+      countQuery = countQuery.lte('createdAt', endDate + 'T23:59:59.999Z');
     }
 
-    // Apply role-based data filtering
+    // Apply role-based data filtering to both queries
     if (user.role !== 'ADMIN') {
       if (user.regionId) {
         // Regional user can see data from their region
-        // If no region filter is specified or it's 'all', use user's region
-        if (!whereConditions.regionId) {
-          whereConditions.regionId = user.regionId;
-        } else if (whereConditions.regionId !== user.regionId) {
-          // If user tries to access different region, restrict to their region
-          whereConditions.regionId = user.regionId;
-        }
+        query = query.eq('regionId', user.regionId);
+        countQuery = countQuery.eq('regionId', user.regionId);
       } else {
         // Regular user can only see their own data
-        whereConditions.userId = user.userId;
+        query = query.eq('userId', user.userId);
+        countQuery = countQuery.eq('userId', user.userId);
       }
     }
 
-    // Get catatan survei texts for analysis with optional filtering
-    const catatanSurvei = await prisma.catatanSurvei.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        catatan: true,
-        createdAt: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        region: {
-          select: {
-            id: true,
-            province: true,
-            city: true,
-            regionCode: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            username: true,
-          },
-        },
-      },
-    });
+    // Get total count first
+    const { count: totalCount, error: countError } = await countQuery;
+    
+    if (countError) {
+      console.error('Supabase count query error:', countError);
+      return NextResponse.json({ 
+        error: 'Database count error',
+        details: countError.message 
+      }, { status: 500 });
+    }
+
+    // Fetch all records using pagination to bypass 1000 limit
+    let allCatatanSurvei: any[] = [];
+    const pageSize = 1000;
+    const totalPages = Math.ceil((totalCount || 0) / pageSize);
+    
+    console.log(`Fetching ${totalCount} records in ${totalPages} pages...`);
+    
+    for (let page = 0; page < totalPages; page++) {
+      const start = page * pageSize;
+      const end = start + pageSize - 1;
+      
+      // Create a new query for this page with the same filters
+      let pageQuery = supabase
+        .from('catatan_survei')
+        .select(`
+          id,
+          catatan,
+          createdAt,
+          category:survey_categories(id, name),
+          region:regions(id, province, city, regionCode),
+          user:users(id, username)
+        `);
+
+      // Apply the same filters as the original query
+      if (categoryId && categoryId !== 'all') {
+        pageQuery = pageQuery.eq('categoryId', categoryId);
+      }
+      if (regionId && regionId !== 'all') {
+        pageQuery = pageQuery.eq('regionId', regionId);
+      }
+      if (startDate) {
+        pageQuery = pageQuery.gte('createdAt', startDate);
+      }
+      if (endDate) {
+        pageQuery = pageQuery.lte('createdAt', endDate + 'T23:59:59.999Z');
+      }
+
+      // Apply role-based data filtering
+      if (user.role !== 'ADMIN') {
+        if (user.regionId) {
+          pageQuery = pageQuery.eq('regionId', user.regionId);
+        } else {
+          pageQuery = pageQuery.eq('userId', user.userId);
+        }
+      }
+      
+      // Add pagination
+      pageQuery = pageQuery.range(start, end);
+      
+      const { data: pageData, error: pageError } = await pageQuery;
+      
+      if (pageError) {
+        console.error(`Error fetching page ${page}:`, pageError);
+        return NextResponse.json({ 
+          error: 'Database error during pagination',
+          details: pageError.message 
+        }, { status: 500 });
+      }
+      
+      if (pageData) {
+        allCatatanSurvei = allCatatanSurvei.concat(pageData);
+      }
+      
+      // If we got less than pageSize, we're done
+      if (!pageData || pageData.length < pageSize) {
+        break;
+      }
+    }
+    
+    console.log(`Successfully fetched ${allCatatanSurvei.length} records`);
+    const catatanSurvei = allCatatanSurvei;
 
     // Simple text analysis functions (same as phenomena analysis)
     function extractKeywords(text: string): string[] {
@@ -122,8 +200,7 @@ export async function GET(request: NextRequest) {
       return 'neutral';
     }
 
-    function analyzeProximityWords(text: string, windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
-      const targetKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh', 'masalah', 'solusi', 'perbaikan'];
+    function analyzeProximityWords(text: string, targetKeywords: string[], windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
       const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
       const words = cleanText.split(/\s+/).filter(word => word.length > 2);
       const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
@@ -154,23 +231,33 @@ export async function GET(request: NextRequest) {
       return result;
     }
 
+    // Parse custom keywords or use defaults
+    const defaultKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh', 'masalah', 'solusi', 'perbaikan'];
+    let customKeywords: string[] = [];
+    
+    if (customKeywordsParam) {
+      customKeywords = customKeywordsParam
+        .split(',')
+        .map(keyword => keyword.trim().toLowerCase())
+        .filter(keyword => keyword.length > 0);
+    }
+    
+    const allTargetKeywords = [...defaultKeywords, ...customKeywords];
+    const uniqueTargetKeywords = [...new Set(allTargetKeywords)];
+
     // Analyze all catatan survei texts
     let allWords: string[] = [];
     const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
     const categoryKeywords: { [category: string]: string[] } = {};
     const regionKeywords: { [region: string]: string[] } = {};
-    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {
-      'peningkatan': { proximityWords: {}, totalOccurrences: 0 },
-      'penurunan': { proximityWords: {}, totalOccurrences: 0 },
-      'naik': { proximityWords: {}, totalOccurrences: 0 },
-      'turun': { proximityWords: {}, totalOccurrences: 0 },
-      'tumbuh': { proximityWords: {}, totalOccurrences: 0 },
-      'masalah': { proximityWords: {}, totalOccurrences: 0 },
-      'solusi': { proximityWords: {}, totalOccurrences: 0 },
-      'perbaikan': { proximityWords: {}, totalOccurrences: 0 }
-    };
+    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
+    
+    // Initialize proximity analysis results for all target keywords
+    uniqueTargetKeywords.forEach(keyword => {
+      proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
+    });
 
-    catatanSurvei.forEach(catatan => {
+    (catatanSurvei || []).forEach(catatan => {
       const words = extractKeywords(catatan.catatan);
       
       allWords = allWords.concat(words);
@@ -180,21 +267,21 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Category-specific keywords
-      const categoryName = catatan.category.name;
+      const categoryName = catatan.category?.name || 'Unknown';
       if (!categoryKeywords[categoryName]) {
         categoryKeywords[categoryName] = [];
       }
       categoryKeywords[categoryName] = categoryKeywords[categoryName].concat(words);
       
       // Region-specific keywords
-      const regionName = `${catatan.region.city}, ${catatan.region.province}`;
+      const regionName = `${catatan.region?.city || 'Unknown'}, ${catatan.region?.province || 'Unknown'}`;
       if (!regionKeywords[regionName]) {
         regionKeywords[regionName] = [];
       }
       regionKeywords[regionName] = regionKeywords[regionName].concat(words);
       
       // Proximity analysis
-      const proximityResults = analyzeProximityWords(catatan.catatan);
+      const proximityResults = analyzeProximityWords(catatan.catatan, uniqueTargetKeywords);
       Object.keys(proximityResults).forEach(keyword => {
         if (proximityAnalysisResults[keyword]) {
           proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
@@ -234,8 +321,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average note length
-    const avgNoteLength = catatanSurvei.length > 0 
-      ? catatanSurvei.reduce((sum, c) => sum + c.catatan.length, 0) / catatanSurvei.length 
+    const avgNoteLength = catatanSurvei && catatanSurvei.length > 0 
+      ? catatanSurvei.reduce((sum, c) => sum + (c.catatan?.length || 0), 0) / catatanSurvei.length 
       : 0;
 
     // Word cloud data (top 50 words for visualization)
@@ -261,7 +348,8 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      totalCatatanSurvei: catatanSurvei.length,
+      totalCatatanSurvei: totalCount || 0,
+      processedRecords: catatanSurvei ? catatanSurvei.length : 0,
       topKeywords,
       sentimentAnalysis: [
         { name: 'Positif', value: sentimentAnalysis.positive },
@@ -280,6 +368,12 @@ export async function GET(request: NextRequest) {
         startDate: startDate || '',
         endDate: endDate || '',
         isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(startDate) || Boolean(endDate)
+      },
+      proximityKeywordsInfo: {
+        defaultKeywords,
+        customKeywords,
+        totalKeywords: uniqueTargetKeywords,
+        hasCustomKeywords: customKeywords.length > 0
       },
     });
 

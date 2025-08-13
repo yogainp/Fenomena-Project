@@ -50,6 +50,12 @@ interface TextAnalysisData {
     endDate: string;
     isFiltered: boolean;
   };
+  proximityKeywordsInfo?: {
+    defaultKeywords: string[];
+    customKeywords: string[];
+    totalKeywords: string[];
+    hasCustomKeywords: boolean;
+  };
 }
 
 export default function AnalyticsPage() {
@@ -64,13 +70,14 @@ export default function AnalyticsPage() {
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
   const [selectedEndDate, setSelectedEndDate] = useState<string>('');
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [customKeywords, setCustomKeywords] = useState<string>('');
   const [textAnalysisLoading, setTextAnalysisLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchTextAnalysis = async (categoryId: string = 'all', startDate: string = '', endDate: string = '', regionId: string = 'all') => {
+  const fetchTextAnalysis = async (categoryId: string = 'all', startDate: string = '', endDate: string = '', regionId: string = 'all', keywords: string = '') => {
     try {
       setTextAnalysisLoading(true);
       const params = new URLSearchParams();
@@ -78,9 +85,10 @@ export default function AnalyticsPage() {
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       if (regionId !== 'all') params.append('regionId', regionId);
+      if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
       const url = `/api/analytics/text-analysis${params.toString() ? '?' + params.toString() : ''}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
       
       if (response.ok) {
         const result = await response.json();
@@ -104,8 +112,8 @@ export default function AnalyticsPage() {
       setError('');
       
       const [overviewRes, textAnalysisRes] = await Promise.all([
-        fetch('/api/analytics/simple-overview'),
-        fetch('/api/analytics/text-analysis'),
+        fetch('/api/analytics/overview', { credentials: 'include' }),
+        fetch('/api/analytics/text-analysis', { credentials: 'include' }),
       ]);
 
       if (overviewRes.ok) {
@@ -137,22 +145,31 @@ export default function AnalyticsPage() {
 
   const handleCategoryChange = (categoryId: string) => {
     setSelectedCategory(categoryId);
-    fetchTextAnalysis(categoryId, selectedStartDate, selectedEndDate, selectedRegion);
+    fetchTextAnalysis(categoryId, selectedStartDate, selectedEndDate, selectedRegion, customKeywords);
   };
 
   const handleStartDateChange = (startDate: string) => {
     setSelectedStartDate(startDate);
-    fetchTextAnalysis(selectedCategory, startDate, selectedEndDate, selectedRegion);
+    fetchTextAnalysis(selectedCategory, startDate, selectedEndDate, selectedRegion, customKeywords);
   };
 
   const handleEndDateChange = (endDate: string) => {
     setSelectedEndDate(endDate);
-    fetchTextAnalysis(selectedCategory, selectedStartDate, endDate, selectedRegion);
+    fetchTextAnalysis(selectedCategory, selectedStartDate, endDate, selectedRegion, customKeywords);
   };
 
   const handleRegionChange = (regionId: string) => {
     setSelectedRegion(regionId);
-    fetchTextAnalysis(selectedCategory, selectedStartDate, selectedEndDate, regionId);
+    fetchTextAnalysis(selectedCategory, selectedStartDate, selectedEndDate, regionId, customKeywords);
+  };
+
+  const handleCustomKeywordsChange = (keywords: string) => {
+    setCustomKeywords(keywords);
+    // Debounced call or manual trigger to avoid too many API calls
+  };
+
+  const handleApplyCustomKeywords = () => {
+    fetchTextAnalysis(selectedCategory, selectedStartDate, selectedEndDate, selectedRegion, customKeywords);
   };
 
   const resetFilters = () => {
@@ -160,7 +177,8 @@ export default function AnalyticsPage() {
     setSelectedStartDate('');
     setSelectedEndDate('');
     setSelectedRegion('all');
-    fetchTextAnalysis('all', '', '', 'all');
+    setCustomKeywords('');
+    fetchTextAnalysis('all', '', '', 'all', '');
   };
 
   if (loading) {
@@ -360,7 +378,7 @@ export default function AnalyticsPage() {
                     cy="50%"
                     outerRadius={100}
                     fill="#8884d8"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                   >
                     {overviewData.periodAnalysis && Array.isArray(overviewData.periodAnalysis) ? overviewData.periodAnalysis.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -492,7 +510,7 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(selectedCategory !== 'all' || selectedStartDate !== '' || selectedEndDate !== '' || selectedRegion !== 'all') && (
+                  {(selectedCategory !== 'all' || selectedStartDate !== '' || selectedEndDate !== '' || selectedRegion !== 'all' || customKeywords !== '') && (
                     <button
                       onClick={resetFilters}
                       disabled={textAnalysisLoading}
@@ -572,7 +590,7 @@ export default function AnalyticsPage() {
                       cy="50%"
                       outerRadius={120}
                       fill="#8884d8"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                      label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                     >
                       {textAnalysisData.sentimentAnalysis.map((entry, index) => (
                         <Cell 
@@ -617,9 +635,63 @@ export default function AnalyticsPage() {
             {textAnalysisData.proximityAnalysis && (
               <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold mb-4">🔍 Analisis Kata Berdekatan</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Analisis kata-kata yang sering muncul di sekitar kata kunci perubahan: peningkatan, penurunan, naik, turun, tumbuh
-                </p>
+                
+                {/* Custom Keywords Input */}
+                <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                    <div className="flex-1">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        🔍 Kata Kunci Kustom untuk Analisis Berdekatan:
+                      </label>
+                      <input
+                        type="text"
+                        value={customKeywords}
+                        onChange={(e) => handleCustomKeywordsChange(e.target.value)}
+                        disabled={textAnalysisLoading}
+                        placeholder="Masukkan kata kunci dipisah koma, contoh: infrastruktur, pembangunan, teknologi"
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Kata kunci akan digabung dengan kata default: peningkatan, penurunan, naik, turun, tumbuh
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleApplyCustomKeywords}
+                      disabled={textAnalysisLoading}
+                      className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Terapkan
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-gray-600 mb-6">
+                  <p className="mb-2">
+                    Analisis kata-kata yang sering muncul di sekitar kata kunci yang dipilih:
+                  </p>
+                  {textAnalysisData.proximityKeywordsInfo && (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        <span className="font-medium">Kata Default:</span>
+                        {textAnalysisData.proximityKeywordsInfo.defaultKeywords.map((keyword: string, index: number) => (
+                          <span key={index} className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                      {textAnalysisData.proximityKeywordsInfo.hasCustomKeywords && (
+                        <div className="flex flex-wrap gap-1">
+                          <span className="font-medium">Kata Kustom:</span>
+                          {textAnalysisData.proximityKeywordsInfo.customKeywords.map((keyword: string, index: number) => (
+                            <span key={index} className="inline-flex px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {Object.entries(textAnalysisData.proximityAnalysis)
                     .filter(([_, data]) => data.occurrences > 0)

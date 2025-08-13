@@ -21,6 +21,12 @@ interface AnalysisData {
     endDate: string;
     isFiltered: boolean;
   };
+  proximityKeywordsInfo?: {
+    defaultKeywords: string[];
+    customKeywords: string[];
+    totalKeywords: string[];
+    hasCustomKeywords: boolean;
+  };
 }
 
 interface Category {
@@ -51,6 +57,7 @@ export default function AnalisisCatatanSurveiPage() {
     startDate: '',
     endDate: '',
   });
+  const [customKeywords, setCustomKeywords] = useState<string>('');
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
@@ -67,8 +74,8 @@ export default function AnalisisCatatanSurveiPage() {
   const fetchInitialData = async () => {
     try {
       const [categoriesRes, regionsRes] = await Promise.all([
-        fetch('/api/categories'),
-        fetch('/api/regions'),
+        fetch('/api/categories', { credentials: 'include' }),
+        fetch('/api/regions', { credentials: 'include' }),
       ]);
 
       if (categoriesRes.ok) {
@@ -90,7 +97,7 @@ export default function AnalisisCatatanSurveiPage() {
     }
   };
 
-  const fetchAnalysisData = async () => {
+  const fetchAnalysisData = async (keywords: string = customKeywords) => {
     try {
       setLoading(true);
       
@@ -99,8 +106,11 @@ export default function AnalisisCatatanSurveiPage() {
       if (filters.regionId !== 'all') params.append('regionId', filters.regionId);
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
+      if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
-      const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`);
+      const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`, {
+        credentials: 'include'
+      });
       
       if (response.ok) {
         const data = await response.json();
@@ -116,6 +126,10 @@ export default function AnalisisCatatanSurveiPage() {
     }
   };
 
+  const handleApplyCustomKeywords = () => {
+    fetchAnalysisData(customKeywords);
+  };
+
   const resetFilters = () => {
     setFilters({
       categoryId: 'all',
@@ -123,6 +137,8 @@ export default function AnalisisCatatanSurveiPage() {
       startDate: '',
       endDate: '',
     });
+    setCustomKeywords('');
+    fetchAnalysisData('');
   };
 
   if (loading) {
@@ -156,7 +172,7 @@ export default function AnalisisCatatanSurveiPage() {
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <div className="text-red-600 text-lg mb-4">{error}</div>
             <button
-              onClick={fetchAnalysisData}
+              onClick={() => fetchAnalysisData()}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             >
               Coba Lagi
@@ -313,7 +329,7 @@ export default function AnalisisCatatanSurveiPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
+                      label={({ name, value }) => `${name}: ${value || 0}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -374,7 +390,64 @@ export default function AnalisisCatatanSurveiPage() {
 
             {/* Proximity Analysis */}
             <div className="bg-white p-6 rounded-lg shadow mb-6">
-              <h3 className="text-lg font-semibold mb-4">Analisis Kedekatan Kata</h3>
+              <h3 className="text-lg font-semibold mb-4">🔍 Analisis Kedekatan Kata</h3>
+              
+              {/* Custom Keywords Input */}
+              <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      🔍 Kata Kunci Kustom untuk Analisis Berdekatan:
+                    </label>
+                    <input
+                      type="text"
+                      value={customKeywords}
+                      onChange={(e) => setCustomKeywords(e.target.value)}
+                      disabled={loading}
+                      placeholder="Masukkan kata kunci dipisah koma, contoh: ekonomi, sosial, infrastruktur"
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Kata kunci akan digabung dengan kata default: peningkatan, penurunan, naik, turun, tumbuh, masalah, solusi, perbaikan
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleApplyCustomKeywords}
+                    disabled={loading}
+                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Terapkan
+                  </button>
+                </div>
+              </div>
+              
+              {analysisData.proximityKeywordsInfo && (
+                <div className="text-sm text-gray-600 mb-6">
+                  <p className="mb-2">
+                    Analisis kata-kata yang sering muncul di sekitar kata kunci yang dipilih:
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded">
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      <span className="font-medium">Kata Default:</span>
+                      {analysisData.proximityKeywordsInfo.defaultKeywords.map((keyword: string, index: number) => (
+                        <span key={index} className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                    {analysisData.proximityKeywordsInfo.hasCustomKeywords && (
+                      <div className="flex flex-wrap gap-1">
+                        <span className="font-medium">Kata Kustom:</span>
+                        {analysisData.proximityKeywordsInfo.customKeywords.map((keyword: string, index: number) => (
+                          <span key={index} className="inline-flex px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {Object.entries(analysisData.proximityAnalysis)
                   .filter(([_, data]) => data.occurrences > 0)
@@ -405,7 +478,7 @@ export default function AnalisisCatatanSurveiPage() {
                     key={index}
                     className="text-center p-3 border rounded-lg hover:bg-gray-50"
                     style={{
-                      fontSize: `${Math.min(Math.max(word.value / 2 + 8, 10), 24)}px`,
+                      fontSize: `${Math.min(Math.max((word.value || 0) / 2 + 8, 10), 24)}px`,
                     }}
                   >
                     <div className="font-medium text-gray-800">{word.text}</div>
@@ -418,11 +491,11 @@ export default function AnalisisCatatanSurveiPage() {
         ) : !loading && (
           <div className="bg-white p-12 rounded-lg shadow text-center">
             <div className="text-gray-500 text-lg mb-4">
-              {analysisData && analysisData.totalCatatanSurvei === 0 
+              {analysisData && (analysisData as any).totalCatatanSurvei === 0 
                 ? 'Tidak ada data catatan survei yang ditemukan untuk filter yang dipilih.'
                 : 'Memuat data analisis...'}
             </div>
-            {analysisData && analysisData.totalCatatanSurvei === 0 && (
+            {analysisData && (analysisData as any).totalCatatanSurvei === 0 && (
               <button
                 onClick={resetFilters}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

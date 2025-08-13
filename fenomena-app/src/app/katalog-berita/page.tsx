@@ -42,6 +42,7 @@ export default function KatalogBeritaPublicPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20); // Default 20 items per page
 
   useEffect(() => {
     fetchBerita();
@@ -112,14 +113,18 @@ export default function KatalogBeritaPublicPage() {
     if (portal.includes('pontianakpost')) return 'bg-blue-100 text-blue-800';
     if (portal.includes('kalbaronline')) return 'bg-green-100 text-green-800';
     if (portal.includes('antaranews')) return 'bg-red-100 text-red-800';
+    if (portal.includes('suarakalbar')) return 'bg-purple-100 text-purple-800';
     return 'bg-gray-100 text-gray-800';
   };
 
   const getPortalName = (portal: string) => {
-    if (portal.includes('pontianakpost')) return 'Pontianak Post';
-    if (portal.includes('kalbaronline')) return 'Kalbar Online';
-    if (portal.includes('antaranews')) return 'Antara News';
-    return portal;
+    const portalMap: { [key: string]: string } = {
+      'pontianakpost.jawapos.com': 'Pontianak Post',
+      'kalbaronline.com': 'Kalbar Online',
+      'kalbar.antaranews.com': 'Antara News Kalbar',
+      'suarakalbar.co.id': 'Suara Kalbar'
+    };
+    return portalMap[portal] || portal;
   };
 
   return (
@@ -179,9 +184,10 @@ export default function KatalogBeritaPublicPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Semua Portal</option>
-                    <option value="pontianakpost">Pontianak Post</option>
-                    <option value="kalbaronline">Kalbar Online</option>
-                    <option value="antaranews">Antara News</option>
+                    <option value="pontianakpost.jawapos.com">Pontianak Post</option>
+                    <option value="kalbaronline.com">Kalbar Online</option>
+                    <option value="kalbar.antaranews.com">Antara News Kalbar</option>
+                    <option value="suarakalbar.co.id">Suara Kalbar</option>
                   </select>
                 </div>
 
@@ -298,7 +304,7 @@ export default function KatalogBeritaPublicPage() {
                         </p>
 
                         {/* Keywords */}
-                        {berita.matchedKeywords.length > 0 && (
+                        {berita.matchedKeywords && Array.isArray(berita.matchedKeywords) && berita.matchedKeywords.length > 0 && (
                           <div className="mb-4">
                             <div className="flex flex-wrap gap-1">
                               {berita.matchedKeywords.slice(0, 3).map((keyword, index) => (
@@ -352,22 +358,71 @@ export default function KatalogBeritaPublicPage() {
                   </button>
 
                   <div className="flex space-x-1">
-                    {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
-                      const pageNumber = i + 1;
-                      return (
-                        <button
-                          key={pageNumber}
-                          onClick={() => setCurrentPage(pageNumber)}
-                          className={`px-3 py-2 text-sm rounded-md ${
-                            currentPage === pageNumber
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-white border border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNumber}
-                        </button>
+                    {(() => {
+                      const maxVisible = 5;
+                      const totalPages = pagination.totalPages;
+                      let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+                      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+                      
+                      // Adjust start page if we're near the end
+                      if (endPage - startPage + 1 < maxVisible) {
+                        startPage = Math.max(1, endPage - maxVisible + 1);
+                      }
+                      
+                      const pages = Array.from(
+                        { length: endPage - startPage + 1 }, 
+                        (_, i) => startPage + i
                       );
-                    })}
+                      
+                      return (
+                        <>
+                          {/* First page + ellipsis if needed */}
+                          {startPage > 1 && (
+                            <>
+                              <button
+                                onClick={() => setCurrentPage(1)}
+                                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                              >
+                                1
+                              </button>
+                              {startPage > 2 && (
+                                <span className="px-2 py-2 text-sm text-gray-500">...</span>
+                              )}
+                            </>
+                          )}
+                          
+                          {/* Visible page numbers */}
+                          {pages.map((pageNumber) => (
+                            <button
+                              key={pageNumber}
+                              onClick={() => setCurrentPage(pageNumber)}
+                              className={`px-3 py-2 text-sm rounded-md ${
+                                currentPage === pageNumber
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white border border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pageNumber}
+                            </button>
+                          ))}
+                          
+                          {/* Ellipsis + last page if needed */}
+                          {endPage < totalPages && (
+                            <>
+                              {endPage < totalPages - 1 && (
+                                <span className="px-2 py-2 text-sm text-gray-500">...</span>
+                              )}
+                              <button
+                                onClick={() => setCurrentPage(totalPages)}
+                                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                              >
+                                {totalPages}
+                              </button>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <button

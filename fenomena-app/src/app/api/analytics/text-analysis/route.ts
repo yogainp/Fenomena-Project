@@ -1,67 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/middleware';
+import { supabase } from '@/lib/supabase';
+import { verifyToken } from '@/lib/auth';
+import { requireRole } from '@/lib/middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    // Get auth token from cookie
+    const token = request.cookies.get('auth-token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Verify token
+    const user = verifyToken(token);
+    if (!user) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
     console.log('Text analysis request by user:', user.userId);
 
     // Get query parameters for filtering
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
-    const periodId = searchParams.get('periodId');
     const regionId = searchParams.get('regionId');
-
-    // Build filter conditions
-    const whereConditions: any = {};
-    if (categoryId && categoryId !== 'all') {
-      whereConditions.categoryId = categoryId;
-    }
-    if (regionId && regionId !== 'all') {
-      whereConditions.regionId = regionId;
-    }
-    
-    // Handle date filtering if provided
+    const customKeywordsParam = searchParams.get('customKeywords');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    if (startDate || endDate) {
-      whereConditions.createdAt = {};
-      if (startDate) {
-        whereConditions.createdAt.gte = new Date(startDate);
-      }
-      if (endDate) {
-        whereConditions.createdAt.lte = new Date(endDate);
-      }
+
+    // Build Supabase query
+    let query = supabase
+      .from('phenomena')
+      .select(`
+        id,
+        title,
+        description,
+        createdAt,
+        category:survey_categories(id, name, periodeSurvei, startDate, endDate),
+        region:regions(id, city, province, regionCode)
+      `);
+
+    // Apply filters
+    if (categoryId && categoryId !== 'all') {
+      query = query.eq('categoryId', categoryId);
+    }
+    if (regionId && regionId !== 'all') {
+      query = query.eq('regionId', regionId);
+    }
+    if (startDate) {
+      query = query.gte('createdAt', startDate);
+    }
+    if (endDate) {
+      query = query.lte('createdAt', endDate);
     }
 
-    // Get phenomena texts for analysis with optional filtering
-    const phenomena = await prisma.phenomenon.findMany({
-      where: whereConditions,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-            periodeSurvei: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        region: {
-          select: {
-            id: true,
-            city: true,
-            province: true,
-            regionCode: true,
-          },
-        },
-      },
-    });
+    const { data: phenomena, error } = await query;
+
+    if (error) {
+      console.error('Text analysis fetch error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
+    }
 
     // Simple text analysis functions
     function extractKeywords(text: string): string[] {
@@ -108,8 +108,7 @@ export async function GET(request: NextRequest) {
       return 'neutral';
     }
 
-    function analyzeProximityWords(text: string, windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
-      const targetKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh'];
+    function analyzeProximityWords(text: string, targetKeywords: string[], windowSize: number = 3): { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } {
       const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
       const words = cleanText.split(/\s+/).filter(word => word.length > 2);
       const stopWords = ['dan', 'yang', 'di', 'ke', 'dari', 'untuk', 'pada', 'dengan', 'dalam', 'oleh', 'adalah', 'ini', 'itu', 'atau', 'juga', 'akan', 'dapat', 'tidak', 'lebih', 'seperti', 'antara', 'sektor', 'hal', 'tersebut', 'serta', 'secara', 'karena', 'namun', 'masih', 'sudah', 'telah', 'sangat', 'cukup', 'hanya', 'belum', 'banyak'];
@@ -140,19 +139,32 @@ export async function GET(request: NextRequest) {
       return result;
     }
 
+    // Parse custom keywords or use defaults
+    const defaultKeywords = ['peningkatan', 'penurunan', 'naik', 'turun', 'tumbuh'];
+    let customKeywords: string[] = [];
+    
+    if (customKeywordsParam) {
+      customKeywords = customKeywordsParam
+        .split(',')
+        .map(keyword => keyword.trim().toLowerCase())
+        .filter(keyword => keyword.length > 0);
+    }
+    
+    const allTargetKeywords = [...defaultKeywords, ...customKeywords];
+    const uniqueTargetKeywords = [...new Set(allTargetKeywords)];
+
     // Analyze all phenomena texts
     let allWords: string[] = [];
     const sentimentAnalysis: { [key: string]: number } = { positive: 0, negative: 0, neutral: 0 };
     const categoryKeywords: { [category: string]: string[] } = {};
-    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {
-      'peningkatan': { proximityWords: {}, totalOccurrences: 0 },
-      'penurunan': { proximityWords: {}, totalOccurrences: 0 },
-      'naik': { proximityWords: {}, totalOccurrences: 0 },
-      'turun': { proximityWords: {}, totalOccurrences: 0 },
-      'tumbuh': { proximityWords: {}, totalOccurrences: 0 }
-    };
+    const proximityAnalysisResults: { [keyword: string]: { proximityWords: { [word: string]: number }, totalOccurrences: number } } = {};
+    
+    // Initialize proximity analysis results for all target keywords
+    uniqueTargetKeywords.forEach(keyword => {
+      proximityAnalysisResults[keyword] = { proximityWords: {}, totalOccurrences: 0 };
+    });
 
-    phenomena.forEach(phenomenon => {
+    (phenomena || []).forEach(phenomenon => {
       const combinedText = `${phenomenon.title} ${phenomenon.description}`;
       const words = extractKeywords(combinedText);
       
@@ -163,14 +175,14 @@ export async function GET(request: NextRequest) {
       sentimentAnalysis[sentiment]++;
       
       // Category-specific keywords
-      const categoryName = phenomenon.category.name;
+      const categoryName = (phenomenon as any).category?.name || 'Unknown';
       if (!categoryKeywords[categoryName]) {
         categoryKeywords[categoryName] = [];
       }
       categoryKeywords[categoryName] = categoryKeywords[categoryName].concat(words);
       
       // Proximity analysis
-      const proximityResults = analyzeProximityWords(combinedText);
+      const proximityResults = analyzeProximityWords(combinedText, uniqueTargetKeywords);
       Object.keys(proximityResults).forEach(keyword => {
         proximityAnalysisResults[keyword].totalOccurrences += proximityResults[keyword].totalOccurrences;
         Object.keys(proximityResults[keyword].proximityWords).forEach(word => {
@@ -198,7 +210,9 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate average description length
-    const avgDescriptionLength = phenomena.reduce((sum, p) => sum + p.description.length, 0) / phenomena.length;
+    const avgDescriptionLength = phenomena && phenomena.length > 0 
+      ? phenomena.reduce((sum, p) => sum + ((p as any).description?.length || 0), 0) / phenomena.length 
+      : 0;
 
     // Word cloud data (top 50 words for visualization)
     const wordCloudData = Object.entries(wordFrequency)
@@ -223,7 +237,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      totalPhenomena: phenomena.length,
+      totalPhenomena: phenomena ? phenomena.length : 0,
       topKeywords,
       sentimentAnalysis: [
         { name: 'Positif', value: sentimentAnalysis.positive },
@@ -242,6 +256,12 @@ export async function GET(request: NextRequest) {
         endDate: endDate || '',
         isFiltered: Boolean(categoryId && categoryId !== 'all') || Boolean(regionId && regionId !== 'all') || Boolean(startDate) || Boolean(endDate)
       },
+      proximityKeywordsInfo: {
+        defaultKeywords,
+        customKeywords,
+        totalKeywords: uniqueTargetKeywords,
+        hasCustomKeywords: customKeywords.length > 0
+      },
     });
 
   } catch (error: any) {
@@ -256,7 +276,7 @@ export async function GET(request: NextRequest) {
 // POST /api/analytics/text-analysis - Save analysis results for scrapping berita
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request);
+    const user = requireRole(request, 'ADMIN');
     console.log('Save analysis request by user:', user.userId);
 
     const body = await request.json();
@@ -277,50 +297,73 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if scrapping berita exists
-    const scrappingBerita = await prisma.scrappingBerita.findUnique({
-      where: { id: scrappingBeritaId },
-    });
+    const { data: scrappingBerita, error: findError } = await supabase
+      .from('scrapping_berita')
+      .select('id')
+      .eq('id', scrappingBeritaId)
+      .single();
 
-    if (!scrappingBerita) {
+    if (findError || !scrappingBerita) {
       return NextResponse.json({ 
         error: 'Scrapping berita not found' 
       }, { status: 404 });
     }
 
     // Check if analysis already exists for this berita
-    const existingAnalysis = await prisma.analysisResult.findFirst({
-      where: {
-        scrappingBeritaId: scrappingBeritaId,
-        analysisType: analysisType,
-      },
-    });
+    const { data: existingAnalysis, error: existingError } = await supabase
+      .from('analysis_results')
+      .select('id')
+      .eq('scrappingBeritaId', scrappingBeritaId)
+      .eq('analysisType', analysisType)
+      .single();
 
     let analysisResult;
 
-    if (existingAnalysis) {
+    if (existingAnalysis && !existingError) {
       // Update existing analysis
-      analysisResult = await prisma.analysisResult.update({
-        where: { id: existingAnalysis.id },
-        data: {
+      const { data: updatedData, error: updateError } = await supabase
+        .from('analysis_results')
+        .update({
           results: results,
-          updatedAt: new Date(),
-        },
-      });
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', (existingAnalysis as any).id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating analysis:', updateError);
+        throw new Error('Failed to update analysis');
+      }
+
+      analysisResult = updatedData;
     } else {
       // Create new analysis
-      analysisResult = await prisma.analysisResult.create({
-        data: {
+      const { data: newData, error: createError } = await supabase
+        .from('analysis_results')
+        .insert({
+          id: crypto.randomUUID(),
           analysisType: analysisType,
           results: results,
           scrappingBeritaId: scrappingBeritaId,
-        },
-      });
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating analysis:', createError);
+        throw new Error('Failed to create analysis');
+      }
+
+      analysisResult = newData;
     }
 
     return NextResponse.json({
       message: 'Analysis saved successfully',
       analysisId: analysisResult.id,
-      updated: !!existingAnalysis,
+      updated: !!(existingAnalysis && !existingError),
     });
 
   } catch (error: any) {

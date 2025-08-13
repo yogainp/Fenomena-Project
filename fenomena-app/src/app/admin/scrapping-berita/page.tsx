@@ -41,6 +41,7 @@ export default function ScrappingBeritaPage() {
     portalUrl: 'https://pontianakpost.jawapos.com/daerah',
     maxPages: 5,
     delayMs: 2000,
+    scrapingEngine: 'axios',
   });
 
   // Available portals for dropdown
@@ -48,17 +49,32 @@ export default function ScrappingBeritaPage() {
     {
       name: 'Pontianak Post',
       url: 'https://pontianakpost.jawapos.com/daerah',
+      engine: 'axios',
       description: 'Portal berita daerah Pontianak Post'
     },
     {
       name: 'Kalbar Online',
       url: 'https://kalbaronline.com/berita-daerah/',
+      engine: 'axios',
       description: 'Portal berita daerah Kalbar Online'
     },
     {
       name: 'Antara News Kalbar',
       url: 'https://kalbar.antaranews.com/kalbar',
+      engine: 'axios',
       description: 'Portal berita Antara News Kalimantan Barat'
+    },
+    {
+      name: 'Suara Kalbar',
+      url: 'https://www.suarakalbar.co.id/category/kalbar/',
+      engine: 'axios',
+      description: 'Portal berita daerah Suara Kalbar'
+    },
+    {
+      name: 'Chromium - Pontianak Post',
+      url: 'https://pontianakpost.jawapos.com/daerah',
+      engine: 'chromium',
+      description: 'Manual scraping dengan browser real untuk Pontianak Post (localhost only)'
     }
   ];
 
@@ -133,10 +149,10 @@ export default function ScrappingBeritaPage() {
       setScrapingResult(data.result);
       
       if (data.result.success) {
-        setSuccessMessage(`Scraping completed successfully! Found ${data.result.newItems} new articles.`);
+        setSuccessMessage(`Scraping completed successfully! Found ${data.result.newItems || 0} new articles.`);
         fetchStatistics(); // Refresh statistics
       } else {
-        setError(`Scraping completed with errors: ${data.result.errors.join(', ')}`);
+        setError(`Scraping completed with errors: ${(data.result.errors || []).join(', ')}`);
       }
       
     } catch (err: unknown) {
@@ -181,6 +197,12 @@ export default function ScrappingBeritaPage() {
               <h1 className="ml-4 text-xl font-semibold">News Scraping Control Panel</h1>
             </div>
             <div className="flex items-center space-x-4">
+              <Link 
+                href="/admin/manage-scraping"
+                className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+              >
+                Schedule Scraping
+              </Link>
               <Link 
                 href="/admin/scrapping-keywords"
                 className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
@@ -311,19 +333,23 @@ export default function ScrappingBeritaPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Portal</label>
                 <select
-                  value={scrapingConfig.portalUrl}
-                  onChange={(e) => setScrapingConfig({ ...scrapingConfig, portalUrl: e.target.value })}
+                  value={`${scrapingConfig.portalUrl}|${scrapingConfig.scrapingEngine}`}
+                  onChange={(e) => {
+                    const [url, engine] = e.target.value.split('|');
+                    setScrapingConfig({ ...scrapingConfig, portalUrl: url, scrapingEngine: engine });
+                  }}
                   className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   disabled={scraping}
                 >
                   {availablePortals.map((portal, index) => (
-                    <option key={index} value={portal.url}>
+                    <option key={index} value={`${portal.url}|${portal.engine}`}>
                       {portal.name} - {portal.description}
                     </option>
                   ))}
                 </select>
                 <p className="mt-1 text-sm text-gray-500">
-                  Selected: {availablePortals.find(p => p.url === scrapingConfig.portalUrl)?.url}
+                  Selected: {availablePortals.find(p => p.url === scrapingConfig.portalUrl && p.engine === scrapingConfig.scrapingEngine)?.name} 
+                  ({scrapingConfig.scrapingEngine.toUpperCase()})
                 </p>
               </div>
               
@@ -387,23 +413,31 @@ export default function ScrappingBeritaPage() {
                 recentActivity.map((item) => (
                   <div key={item.id} className="border-b border-gray-200 pb-4 last:border-b-0">
                     <h4 className="text-sm font-medium text-gray-900 mb-1">
-                      {item.judul.length > 60 ? `${item.judul.substring(0, 60)}...` : item.judul}
+                      {(item.judul || '').length > 60 ? `${(item.judul || '').substring(0, 60)}...` : (item.judul || 'No title')}
                     </h4>
                     <p className="text-xs text-gray-500 mb-2">
-                      {item.portalBerita} • {new Date(item.tanggalScrap).toLocaleDateString()}
+                      {item.portalBerita || 'Unknown source'} • {item.tanggalScrap ? new Date(item.tanggalScrap).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' }) : 'Unknown date'}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {item.matchedKeywords.slice(0, 3).map((keyword, index) => (
-                        <span 
-                          key={index}
-                          className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                      {item.matchedKeywords.length > 3 && (
-                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
-                          +{item.matchedKeywords.length - 3} more
+                      {Array.isArray(item.matchedKeywords) && item.matchedKeywords.length > 0 ? (
+                        <>
+                          {item.matchedKeywords.slice(0, 3).map((keyword, index) => (
+                            <span 
+                              key={index}
+                              className="inline-flex px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                          {item.matchedKeywords.length > 3 && (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded">
+                              +{item.matchedKeywords.length - 3} more
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-500 rounded">
+                          No keywords
                         </span>
                       )}
                     </div>
@@ -438,16 +472,16 @@ export default function ScrappingBeritaPage() {
                 <div className="text-sm text-yellow-800">Duplicates</div>
               </div>
               <div className="text-center p-4 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">{scrapingResult.errors.length}</div>
+                <div className="text-2xl font-bold text-red-600">{(scrapingResult.errors || []).length}</div>
                 <div className="text-sm text-red-800">Errors</div>
               </div>
             </div>
 
-            {scrapingResult.errors.length > 0 && (
+            {(scrapingResult.errors || []).length > 0 && (
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Errors:</h4>
                 <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-                  {scrapingResult.errors.map((error, index) => (
+                  {(scrapingResult.errors || []).map((error, index) => (
                     <li key={index}>{error}</li>
                   ))}
                 </ul>

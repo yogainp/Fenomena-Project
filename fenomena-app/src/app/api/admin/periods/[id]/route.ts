@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 
 const periodSchema = z.object({
@@ -17,28 +17,41 @@ const periodSchema = z.object({
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
     const body = await request.json();
     const validatedData = periodSchema.parse(body);
 
-    const existingPeriod = await prisma.surveyPeriod.findUnique({
-      where: { id: params.id },
-    });
+    const { data: existingPeriod, error: fetchError } = await supabase
+      .from('survey_categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error fetching period:', fetchError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (!existingPeriod) {
       return NextResponse.json({ error: 'Period not found' }, { status: 404 });
     }
 
-    const duplicatePeriod = await prisma.surveyPeriod.findFirst({
-      where: {
-        name: validatedData.name,
-        NOT: { id: params.id },
-      },
-    });
+    const { data: duplicatePeriod, error: duplicateError } = await supabase
+      .from('survey_categories')
+      .select('id')
+      .eq('name', validatedData.name)
+      .neq('id', id)
+      .single();
+
+    if (duplicateError && duplicateError.code !== 'PGRST116') {
+      console.error('Error checking duplicate period:', duplicateError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (duplicatePeriod) {
       return NextResponse.json(
@@ -47,14 +60,21 @@ export async function PUT(
       );
     }
 
-    const period = await prisma.surveyPeriod.update({
-      where: { id: params.id },
-      data: {
+    const { data: period, error: updateError } = await supabase
+      .from('survey_categories')
+      .update({
         name: validatedData.name,
-        startDate: new Date(validatedData.startDate),
-        endDate: new Date(validatedData.endDate),
-      },
-    });
+        startDate: validatedData.startDate,
+        endDate: validatedData.endDate,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Error updating period:', updateError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json(period);
   } catch (error: any) {
@@ -63,7 +83,7 @@ export async function PUT(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }
@@ -74,36 +94,54 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     requireRole(request, 'ADMIN');
+    const { id } = await params;
 
-    const existingPeriod = await prisma.surveyPeriod.findUnique({
-      where: { id: params.id },
-      include: {
-        _count: {
-          select: {
-            phenomena: true,
-          },
-        },
-      },
-    });
+    const { data: existingPeriod, error: fetchError } = await supabase
+      .from('survey_categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error fetching period:', fetchError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Check for related phenomena
+    const { count: phenomenaCount, error: countError } = await supabase
+      .from('phenomena')
+      .select('*', { count: 'exact', head: true })
+      .eq('categoryId', id);
+
+    if (countError) {
+      console.error('Error counting phenomena:', countError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (!existingPeriod) {
       return NextResponse.json({ error: 'Period not found' }, { status: 404 });
     }
 
-    if (existingPeriod._count.phenomena > 0) {
+    if ((phenomenaCount || 0) > 0) {
       return NextResponse.json(
         { error: 'Cannot delete period that has phenomena' },
         { status: 400 }
       );
     }
 
-    await prisma.surveyPeriod.delete({
-      where: { id: params.id },
-    });
+    const { error: deleteError } = await supabase
+      .from('survey_categories')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('Error deleting period:', deleteError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json({ message: 'Period deleted successfully' });
   } catch (error: any) {

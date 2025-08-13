@@ -1,0 +1,181 @@
+'use client';
+
+import React from 'react';
+
+interface FenomenaLogoProps {
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export default function FenomenaLogo({ className = '', size = 'md' }: FenomenaLogoProps) {
+  const sizeClasses = {
+    sm: 'w-6 h-6',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12'
+  };
+
+  return (
+    <div className={`relative ${sizeClasses[size]} ${className}`}>
+      <svg
+        viewBox="0 0 60 60"
+        className="w-full h-full"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Background circle */}
+        <circle
+          cx="30"
+          cy="30"
+          r="28"
+          fill="url(#backgroundGradient)"
+          stroke="#1e40af"
+          strokeWidth="2"
+        />
+        
+        {/* Letter F */}
+        <text
+          x="30"
+          y="40"
+          textAnchor="middle"
+          className="fill-white font-bold"
+          style={{ fontSize: '28px', fontFamily: 'Arial, sans-serif' }}
+        >
+          F
+        </text>
+        
+        {/* Rain drops */}
+        <g className="rain-animation">
+          {/* Rain drop 1 */}
+          <ellipse
+            cx="20"
+            cy="5"
+            rx="1"
+            ry="3"
+            fill="#60a5fa"
+            opacity="0.7"
+          >
+            <animate
+              attributeName="cy"
+              values="5;55;5"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.7;0.3;0.7"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </ellipse>
+          
+          {/* Rain drop 2 */}
+          <ellipse
+            cx="35"
+            cy="8"
+            rx="1"
+            ry="3"
+            fill="#3b82f6"
+            opacity="0.6"
+          >
+            <animate
+              attributeName="cy"
+              values="8;55;8"
+              dur="1.5s"
+              repeatCount="indefinite"
+              begin="0.3s"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.6;0.2;0.6"
+              dur="1.5s"
+              repeatCount="indefinite"
+              begin="0.3s"
+            />
+          </ellipse>
+          
+          {/* Rain drop 3 */}
+          <ellipse
+            cx="45"
+            cy="3"
+            rx="1"
+            ry="3"
+            fill="#60a5fa"
+            opacity="0.8"
+          >
+            <animate
+              attributeName="cy"
+              values="3;55;3"
+              dur="1.8s"
+              repeatCount="indefinite"
+              begin="0.6s"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.8;0.4;0.8"
+              dur="1.8s"
+              repeatCount="indefinite"
+              begin="0.6s"
+            />
+          </ellipse>
+          
+          {/* Rain drop 4 */}
+          <ellipse
+            cx="15"
+            cy="10"
+            rx="1"
+            ry="3"
+            fill="#3b82f6"
+            opacity="0.5"
+          >
+            <animate
+              attributeName="cy"
+              values="10;55;10"
+              dur="2.2s"
+              repeatCount="indefinite"
+              begin="0.9s"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.5;0.2;0.5"
+              dur="2.2s"
+              repeatCount="indefinite"
+              begin="0.9s"
+            />
+          </ellipse>
+          
+          {/* Rain drop 5 */}
+          <ellipse
+            cx="40"
+            cy="2"
+            rx="1"
+            ry="3"
+            fill="#60a5fa"
+            opacity="0.6"
+          >
+            <animate
+              attributeName="cy"
+              values="2;55;2"
+              dur="1.7s"
+              repeatCount="indefinite"
+              begin="1.2s"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.6;0.3;0.6"
+              dur="1.7s"
+              repeatCount="indefinite"
+              begin="1.2s"
+            />
+          </ellipse>
+        </g>
+        
+        {/* Gradients */}
+        <defs>
+          <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#1e40af" />
+            <stop offset="100%" stopColor="#3b82f6" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+}

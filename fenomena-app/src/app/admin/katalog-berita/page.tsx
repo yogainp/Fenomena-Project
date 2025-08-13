@@ -49,7 +49,6 @@ export default function KatalogBeritaPage() {
   // Selection states
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [formLoading, setFormLoading] = useState(false);
-  const [clearAllLoading, setClearAllLoading] = useState(false);
 
   useEffect(() => {
     fetchBerita();
@@ -152,42 +151,6 @@ export default function KatalogBeritaPage() {
     }
   };
 
-  const handleClearAll = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete ALL scraped news articles? This action cannot be undone and will permanently remove all news data from the database.'
-    );
-    if (!confirmed) return;
-    
-    const doubleConfirmed = window.confirm(
-      'This is your final warning. Clicking OK will delete ALL scraped news articles. Are you absolutely sure?'
-    );
-    if (!doubleConfirmed) return;
-    
-    try {
-      setClearAllLoading(true);
-      setError('');
-      
-      const response = await makeAuthenticatedRequest('/api/admin/scrapping-berita/clear-all', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to clear all news');
-      }
-      
-      const result = await response.json();
-      setSuccessMessage(`Successfully deleted ${result.deletedCount} news articles`);
-      setSelectedItems([]);
-      fetchBerita();
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setClearAllLoading(false);
-    }
-  };
 
   const handleSingleDelete = async (beritaId: string, beritaTitle: string) => {
     const confirmed = window.confirm(
@@ -221,12 +184,23 @@ export default function KatalogBeritaPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getPortalDisplayName = (portalDomain: string): string => {
+    const portalMap: { [key: string]: string } = {
+      'pontianakpost.jawapos.com': 'Pontianak Post',
+      'kalbaronline.com': 'Kalbar Online',
+      'kalbar.antaranews.com': 'Antara News Kalbar',
+      'suarakalbar.co.id': 'Suara Kalbar'
+    };
+    return portalMap[portalDomain] || portalDomain;
   };
 
   if (loading && beritaList.length === 0) {
@@ -263,13 +237,6 @@ export default function KatalogBeritaPage() {
               <h1 className="ml-4 text-xl font-semibold">News Catalog</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={handleClearAll}
-                disabled={clearAllLoading}
-                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50"
-              >
-                {clearAllLoading ? 'Clearing...' : 'Clear All News'}
-              </button>
               <Link 
                 href="/admin/scrapping-berita"
                 className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
@@ -329,13 +296,17 @@ export default function KatalogBeritaPage() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
-                <input
-                  type="text"
-                  placeholder="Filter by portal..."
+                <select
                   value={portalFilter}
                   onChange={(e) => setPortalFilter(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Portals</option>
+                  <option value="pontianakpost.jawapos.com">Pontianak Post</option>
+                  <option value="kalbaronline.com">Kalbar Online</option>
+                  <option value="kalbar.antaranews.com">Antara News Kalbar</option>
+                  <option value="suarakalbar.co.id">Suara Kalbar</option>
+                </select>
               </div>
               
               <div>
@@ -462,7 +433,7 @@ export default function KatalogBeritaPage() {
                         
                         <div className="flex items-center flex-wrap gap-2 text-sm mb-3">
                           <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                            {berita.portalBerita}
+                            {getPortalDisplayName(berita.portalBerita)}
                           </span>
                           <span className="text-gray-500">
                             Published: {formatDate(berita.tanggalBerita)}

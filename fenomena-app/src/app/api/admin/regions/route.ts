@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { z } from 'zod';
 
@@ -22,56 +22,72 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where conditions
-    const whereConditions: any = {};
-    
+    // Build Supabase query
+    let query = supabase.from('regions').select('*', { count: 'exact' });
+
+    // Apply filters
     if (search) {
-      whereConditions.OR = [
-        { city: { contains: search, mode: 'insensitive' } },
-        { province: { contains: search, mode: 'insensitive' } },
-        { regionCode: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`city.ilike.%${search}%,province.ilike.%${search}%,regionCode.ilike.%${search}%`);
     }
 
     if (province) {
-      whereConditions.province = { contains: province, mode: 'insensitive' };
+      query = query.ilike('province', `%${province}%`);
     }
 
-    // Get regions with pagination
-    const [regions, totalRegions] = await Promise.all([
-      prisma.region.findMany({
-        where: whereConditions,
-        include: {
-          _count: {
-            select: {
-              users: true,
-              phenomena: true,
-            },
-          },
-        },
-        orderBy: [
-          { province: 'asc' },
-          { city: 'asc' },
-        ],
-        skip,
-        take: limit,
-      }),
-      prisma.region.count({ where: whereConditions }),
-    ]);
+    // Apply pagination and ordering
+    const offset = (page - 1) * limit;
+    query = query
+      .order('province', { ascending: true })
+      .order('city', { ascending: true })
+      .range(offset, offset + limit - 1);
 
-    const totalPages = Math.ceil(totalRegions / limit);
+    const { data: regionsData, count: totalRegions, error: regionsError } = await query;
+
+    if (regionsError) {
+      console.error('Error fetching regions:', regionsError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Get user and phenomena counts for each region
+    const regionsWithCounts = await Promise.all(
+      (regionsData || []).map(async (region: any) => {
+        const [
+          { count: userCount, error: userCountError },
+          { count: phenomenaCount, error: phenomenaCountError }
+        ] = await Promise.all([
+          supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('regionId', region.id),
+          supabase
+            .from('phenomena')
+            .select('*', { count: 'exact', head: true })
+            .eq('regionId', region.id)
+        ]);
+
+        if (userCountError) {
+          console.error('Error counting users for region:', region.id, userCountError);
+        }
+        if (phenomenaCountError) {
+          console.error('Error counting phenomena for region:', region.id, phenomenaCountError);
+        }
+
+        return {
+          ...region,
+          userCount: userCount || 0,
+          phenomenaCount: phenomenaCount || 0,
+        };
+      })
+    );
+
+    const totalPages = Math.ceil((totalRegions || 0) / limit);
 
     return NextResponse.json({
-      regions: regions.map(region => ({
-        ...region,
-        userCount: region._count.users,
-        phenomenaCount: region._count.phenomena,
-        _count: undefined,
-      })),
+      regions: regionsWithCounts,
       pagination: {
         currentPage: page,
         totalPages,
-        totalRegions,
+        totalRegions: totalRegions || 0,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
@@ -97,16 +113,23 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
     const { province, city, regionCode } = validationResult.data;
 
     // Check if region code already exists
-    const existingRegion = await prisma.region.findUnique({
-      where: { regionCode },
-    });
+    const { data: existingRegion, error: checkError } = await supabase
+      .from('regions')
+      .select('id')
+      .eq('regionCode', regionCode)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('Error checking existing region:', checkError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     if (existingRegion) {
       return NextResponse.json({
@@ -115,29 +138,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Create region
-    const newRegion = await prisma.region.create({
-      data: {
+    const { data: newRegion, error: createError } = await supabase
+      .from('regions')
+      .insert({
+        id: crypto.randomUUID(),
         province,
         city,
         regionCode,
-      },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            phenomena: true,
-          },
-        },
-      },
-    });
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Error creating region:', createError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: 'Region created successfully',
       region: {
         ...newRegion,
-        userCount: newRegion._count.users,
-        phenomenaCount: newRegion._count.phenomena,
-        _count: undefined,
+        userCount: 0,
+        phenomenaCount: 0,
       },
     }, { status: 201 });
 

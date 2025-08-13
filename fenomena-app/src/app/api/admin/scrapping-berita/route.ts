@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 
 const createBeritaSchema = z.object({
   idBerita: z.string().min(1, 'ID Berita cannot be empty'),
@@ -29,77 +30,52 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    // Build where conditions
-    const whereConditions: any = {};
-    
+    // Build Supabase query
+    let query = supabase
+      .from('scrapping_berita')
+      .select('*', { count: 'exact' });
+
+    // Apply filters
     if (search) {
-      whereConditions.OR = [
-        { judul: { contains: search, mode: 'insensitive' } },
-        { isi: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`judul.ilike.%${search}%,isi.ilike.%${search}%`);
     }
-
     if (portal) {
-      whereConditions.portalBerita = { contains: portal, mode: 'insensitive' };
+      query = query.ilike('portalBerita', `%${portal}%`);
     }
-
-    if (dateFrom || dateTo) {
-      whereConditions.tanggalBerita = {};
-      if (dateFrom) {
-        whereConditions.tanggalBerita.gte = new Date(dateFrom);
-      }
-      if (dateTo) {
-        whereConditions.tanggalBerita.lte = new Date(dateTo + 'T23:59:59.999Z');
-      }
+    if (dateFrom) {
+      query = query.gte('tanggalBerita', new Date(dateFrom).toISOString());
     }
-
+    if (dateTo) {
+      query = query.lte('tanggalBerita', new Date(dateTo + 'T23:59:59.999Z').toISOString());
+    }
     if (keyword) {
-      whereConditions.matchedKeywords = {
-        hasSome: [keyword],
-      };
+      query = query.contains('matchedKeywords', [keyword]);
     }
 
-    // Get news with pagination
-    const [beritaList, totalBerita] = await Promise.all([
-      prisma.scrappingBerita.findMany({
-        where: whereConditions,
-        select: {
-          id: true,
-          idBerita: true,
-          portalBerita: true,
-          linkBerita: true,
-          judul: true,
-          isi: true,
-          tanggalBerita: true,
-          tanggalScrap: true,
-          matchedKeywords: true,
-          createdAt: true,
-          _count: {
-            select: {
-              analysisResults: true,
-            },
-          },
-        },
-        orderBy: { tanggalBerita: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.scrappingBerita.count({ where: whereConditions }),
-    ]);
+    // Apply ordering and pagination
+    query = query
+      .order('tanggalBerita', { ascending: false })
+      .range(skip, skip + limit - 1);
 
-    const totalPages = Math.ceil(totalBerita / limit);
+    const { data: beritaList, error, count: totalBerita } = await query;
+    
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
+
+    const totalPages = Math.ceil((totalBerita || 0) / limit);
 
     return NextResponse.json({
-      berita: beritaList.map(item => ({
+      berita: (beritaList || []).map(item => ({
         ...item,
-        isi: item.isi.substring(0, 200) + (item.isi.length > 200 ? '...' : ''), // Truncate content for list view
-        analysisCount: item._count.analysisResults,
-        _count: undefined,
+        isi: (item.isi as any).substring(0, 200) + ((item.isi as any).length > 200 ? '...' : ''), // Truncate content for list view
+        analysisCount: 0, // TODO: Add analysis count from supabase if needed
       })),
       pagination: {
         currentPage: page,
         totalPages,
-        totalBerita,
+        totalBerita: totalBerita || 0,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
@@ -125,16 +101,18 @@ export async function POST(request: NextRequest) {
     if (!validationResult.success) {
       return NextResponse.json({
         error: 'Validation failed',
-        details: validationResult.error.errors,
+        details: validationResult.error.issues,
       }, { status: 400 });
     }
 
     const { idBerita, portalBerita, linkBerita, judul, isi, tanggalBerita, matchedKeywords } = validationResult.data;
 
     // Check if news already exists
-    const existingBerita = await prisma.scrappingBerita.findUnique({
-      where: { idBerita },
-    });
+    const { data: existingBerita } = await supabase
+      .from('scrapping_berita')
+      .select('*')
+      .eq('idBerita', idBerita)
+      .single();
 
     if (existingBerita) {
       return NextResponse.json({
@@ -144,28 +122,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Create news
-    const newBerita = await prisma.scrappingBerita.create({
-      data: {
+    const { data: newBerita, error: createError } = await supabase
+      .from('scrapping_berita')
+      .insert({
+        id: randomUUID(),
         idBerita,
         portalBerita,
         linkBerita,
         judul,
         isi,
-        tanggalBerita: new Date(tanggalBerita),
+        tanggalBerita: new Date(tanggalBerita).toISOString(),
         matchedKeywords,
-      },
-    });
+        tanggalScrap: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+      .select()
+      .single();
+      
+    if (createError) {
+      console.error('Error creating berita:', createError);
+      throw createError;
+    }
 
-    // Update match count for matched keywords
+    // Update match count for matched keywords using helper function
     if (matchedKeywords && matchedKeywords.length > 0) {
-      await prisma.scrappingKeyword.updateMany({
-        where: {
-          keyword: { in: matchedKeywords },
-        },
-        data: {
-          matchCount: { increment: 1 },
-        },
-      });
+      const { incrementKeywordMatchCountsByName } = await import('@/lib/supabase-helpers');
+      try {
+        await incrementKeywordMatchCountsByName(matchedKeywords);
+      } catch (err) {
+        console.warn('Error updating keyword match count:', err);
+      }
     }
 
     return NextResponse.json({
@@ -197,15 +184,19 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete news
-    const deletedBerita = await prisma.scrappingBerita.deleteMany({
-      where: {
-        id: { in: beritaIds },
-      },
-    });
+    const { error: deleteError } = await supabase
+      .from('scrapping_berita')
+      .delete()
+      .in('id', beritaIds);
+      
+    if (deleteError) {
+      console.error('Error deleting berita:', deleteError);
+      throw deleteError;
+    }
 
     return NextResponse.json({
-      message: `Deleted ${deletedBerita.count} news items successfully`,
-      deletedCount: deletedBerita.count,
+      message: `Deleted ${beritaIds.length} news items successfully`,
+      deletedCount: beritaIds.length,
     });
 
   } catch (error: any) {

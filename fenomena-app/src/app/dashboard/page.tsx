@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import FenomenaLogo from '@/components/FenomenaLogo';
 
 interface User {
   id: string;
@@ -23,7 +24,9 @@ export default function DashboardPage() {
   const fetchUserData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/profile');
+      const response = await fetch('/api/profile', {
+        credentials: 'include' // Important: Include cookies in request
+      });
       
       if (response.ok) {
         const userData = await response.json();
@@ -49,6 +52,7 @@ export default function DashboardPage() {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include' // Important: Include cookies in request
       });
       router.push('/login');
     } catch (error) {
@@ -69,7 +73,8 @@ export default function DashboardPage() {
       <nav className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center space-x-3">
+              <FenomenaLogo size="md" />
               <h1 className="text-xl font-semibold">Aplikasi Kompilasi Fenomena</h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -101,8 +106,8 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-            {/* Navigation Cards */}
+          {/* Baris 1: Kelola Fenomena, Katalog Fenomena, Katalog Berita, Download Data Fenomena */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-6 h-full flex flex-col">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
@@ -133,80 +138,6 @@ export default function DashboardPage() {
                   <Link href="/catalog">
                     <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                       Buka
-                    </button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6 h-full flex flex-col">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Analisis
-                </h3>
-                <p className="mt-2 text-sm text-gray-500 flex-1">
-                  Lihat analisis dan visualisasi data
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <Link href="/analytics">
-                    <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-                      Buka
-                    </button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {user?.role === 'ADMIN' && (
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-6 h-full flex flex-col">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">
-                    Catatan Survei
-                  </h3>
-                  <p className="mt-2 text-sm text-gray-500 flex-1">
-                    Upload data survei CSV dan analisis teks
-                  </p>
-                  <div className="mt-4 flex justify-end">
-                    <Link href="/catatan-survei">
-                      <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-                        Buka
-                      </button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6 h-full flex flex-col">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Analisis Catatan Survei
-                </h3>
-                <p className="mt-2 text-sm text-gray-500 flex-1">
-                  Analisis teks dan visualisasi data catatan survei
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <Link href="/analisis-catatan-survei">
-                    <button className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
-                      Buka
-                    </button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-6 h-full flex flex-col">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  🧠 Insight Fenomena
-                </h3>
-                <p className="mt-2 text-sm text-gray-500 flex-1">
-                  AI-powered insights berdasarkan korelasi fenomena, survei, dan berita
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <Link href="/insight-fenomena">
-                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-                      Generate
                     </button>
                   </Link>
                 </div>
@@ -248,6 +179,104 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Baris 2: Analisis, Analisis Catatan Survei, Analisis Berita, Insight Fenomena */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Analisis
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Lihat analisis dan visualisasi data
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/analytics">
+                    <button className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Analisis Catatan Survei
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Analisis teks dan visualisasi data catatan survei
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/analisis-catatan-survei">
+                    <button className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  📊 Analisis Berita
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  Analisis mendalam data berita hasil scraping dengan visualisasi dan insights
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/analisis-berita">
+                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                      Buka
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-6 h-full flex flex-col">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  🧠 Insight Fenomena
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 flex-1">
+                  AI-powered insights berdasarkan korelasi fenomena, survei, dan berita
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/insight-fenomena">
+                    <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                      Generate
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards lainnya */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            {user?.role === 'ADMIN' && (
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-6 h-full flex flex-col">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Catatan Survei
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500 flex-1">
+                    Upload data survei CSV dan analisis teks
+                  </p>
+                  <div className="mt-4 flex justify-end">
+                    <Link href="/catatan-survei">
+                      <button className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+                        Buka
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {user?.role === 'ADMIN' && (
               <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-3 xl:col-span-5">

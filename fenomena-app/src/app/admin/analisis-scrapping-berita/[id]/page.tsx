@@ -165,7 +165,7 @@ export default function AnalisisScrappingBeritaPage() {
       .map(([word, count]) => ({ word, count }));
     
     // Keyword density analysis
-    const keywordDensity = beritaData.matchedKeywords.map(keyword => {
+    const keywordDensity = (beritaData.matchedKeywords || []).map(keyword => {
       const count = (fullText.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || []).length;
       const density = (count / words.length) * 100;
       return { keyword, count, density: Math.round(density * 100) / 100 };
@@ -220,6 +220,7 @@ export default function AnalisisScrappingBeritaPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -342,7 +343,7 @@ export default function AnalisisScrappingBeritaPage() {
             <span>Scraped: {formatDate(berita.tanggalScrap)}</span>
           </div>
           
-          {berita.matchedKeywords.length > 0 && (
+          {(berita.matchedKeywords && berita.matchedKeywords.length > 0) && (
             <div className="mb-4">
               <span className="text-sm font-medium text-gray-700 mr-2">Matched Keywords:</span>
               <div className="inline-flex flex-wrap gap-1">
@@ -449,7 +450,7 @@ export default function AnalisisScrappingBeritaPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${(percent || 0).toFixed(0)}%`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 // GET /api/katalog-berita - Get news catalog for public access
 export async function GET(request: NextRequest) {
@@ -13,77 +13,62 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    // Build where clause
-    const where: Record<string, any> = {};
+    // Build Supabase query
+    let query = supabase.from('scrapping_berita').select('*', { count: 'exact' });
 
+    // Apply filters
     if (search) {
-      where.OR = [
-        { judul: { contains: search, mode: 'insensitive' } },
-        { isi: { contains: search, mode: 'insensitive' } },
-      ];
+      query = query.or(`judul.ilike.%${search}%,isi.ilike.%${search}%`);
     }
 
     if (portal) {
-      where.portalBerita = { contains: portal, mode: 'insensitive' };
+      query = query.ilike('portalBerita', `%${portal}%`);
     }
 
     if (keyword) {
-      where.matchedKeywords = { has: keyword };
+      query = query.contains('matchedKeywords', [keyword]);
     }
 
-    if (dateFrom || dateTo) {
-      where.tanggalBerita = {};
-      if (dateFrom) {
-        where.tanggalBerita.gte = new Date(dateFrom);
-      }
-      if (dateTo) {
-        where.tanggalBerita.lte = new Date(dateTo + 'T23:59:59.999Z');
-      }
+    if (dateFrom) {
+      query = query.gte('tanggalBerita', dateFrom);
     }
 
-    // Get total count
-    const totalBerita = await prisma.scrappingBerita.count({ where });
+    if (dateTo) {
+      query = query.lte('tanggalBerita', dateTo + 'T23:59:59.999Z');
+    }
 
-    // Get news data
-    const berita = await prisma.scrappingBerita.findMany({
-      where,
-      select: {
-        id: true,
-        idBerita: true,
-        portalBerita: true,
-        linkBerita: true,
-        judul: true,
-        isi: true,
-        tanggalBerita: true,
-        tanggalScrap: true,
-        matchedKeywords: true,
-        createdAt: true,
-      },
-      orderBy: { tanggalBerita: 'desc' },
-      skip,
-      take: limit,
-    });
+    // Apply pagination and ordering
+    query = query
+      .order('tanggalBerita', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data: berita, count: totalBerita, error } = await query;
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json({ 
+        error: 'Database error',
+        details: error.message 
+      }, { status: 500 });
+    }
 
     // Calculate pagination
-    const totalPages = Math.ceil(totalBerita / limit);
+    const totalPages = Math.ceil((totalBerita || 0) / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
     return NextResponse.json({
-      berita: berita.map(item => ({
+      berita: (berita || []).map(item => ({
         ...item,
-        tanggalBerita: item.tanggalBerita.toISOString(),
-        tanggalScrap: item.tanggalScrap.toISOString(),
-        createdAt: item.createdAt.toISOString(),
         // Truncate content for list view
-        isi: item.isi.length > 200 ? item.isi.substring(0, 200) + '...' : item.isi,
+        isi: (item as any).isi && ((item as any).isi as string).length > 200 ? ((item as any).isi as string).substring(0, 200) + '...' : (item as any).isi,
       })),
       pagination: {
         currentPage: page,
         totalPages,
-        totalBerita,
+        totalBerita: totalBerita || 0,
         hasNextPage,
         hasPrevPage,
       },
