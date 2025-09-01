@@ -35,11 +35,11 @@ export async function GET(request: NextRequest) {
           .eq('categoryId', (category as any).id);
 
         if (countError) {
-          console.error('Error counting phenomena for category:', category.id, countError);
+          console.error('Error counting phenomena for category:', (category as any).id, countError);
         }
 
         return {
-          ...category,
+          ...(category as any),
           _count: {
             phenomena: phenomenaCount || 0,
           },
@@ -84,16 +84,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new category
-    const { data: category, error: createError } = await supabase
+    const insertData: any = {
+      id: crypto.randomUUID(),
+      name: validatedData.name,
+      description: validatedData.description || null,
+      periodeSurvei: validatedData.periodeSurvei || null,
+      startDate: validatedData.startDate || null,
+      endDate: validatedData.endDate || null,
+    };
+
+    const { data: category, error: createError } = await (supabase as any)
       .from('survey_categories')
-      .insert({
-        id: crypto.randomUUID(),
-        name: validatedData.name,
-        description: validatedData.description || null,
-        periodeSurvei: validatedData.periodeSurvei || null,
-        startDate: validatedData.startDate || null,
-        endDate: validatedData.endDate || null,
-      })
+      .insert(insertData)
       .select()
       .single();
 

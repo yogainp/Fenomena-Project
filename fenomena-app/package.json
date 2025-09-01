@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "set PORT=3000 && next dev --turbopack --port 3000",
-    "start": "set PORT=3000 && next start --port 3000",
+    "start": "node server.js",
+    "start:next": "set PORT=3000 && next start --port 3000",
     "build": "next build",
     "lint": "next lint",
-    "server:restart": "node scripts/restart-server.js"
+    "server:restart": "node scripts/restart-server.js",
+    "cpanel:build": "npm install && npm run build",
+    "cpanel:start": "NODE_ENV=production node server.js"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.1.1",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.53.0",
     "@types/bcrypt": "^6.0.0",
@@ -23,28 +25,25 @@
     "jsonwebtoken": "^9.0.2",
     "next": "15.4.2",
     "node-cron": "^4.2.1",
-    "pg": "^8.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-hook-form": "^7.60.0",
     "recharts": "^3.1.0",
     "xlsx": "^0.18.5",
     "zod": "^4.0.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.1.12",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/puppeteer": "^5.4.7",
     "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react-dom": "^19.1.9",
     "eslint": "^9",
     "eslint-config-next": "15.4.2",
     "puppeteer": "^24.16.1",
     "tailwindcss": "^4",
-    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }

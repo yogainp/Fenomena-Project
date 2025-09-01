@@ -438,17 +438,27 @@ class SchedulerService {
       for (const schedule of schedules) {
         try {
           // Check if schedule is due for execution
-          const nextRun = new Date(schedule.nextRun);
+          if (!schedule.nextRun) {
+            console.log(`⚠️ [VERCEL CRON] Schedule "${schedule.name}" has no nextRun time, skipping`);
+            continue;
+          }
+          
+          const nextRun = new Date(schedule.nextRun as string);
+          if (isNaN(nextRun.getTime())) {
+            console.log(`⚠️ [VERCEL CRON] Schedule "${schedule.name}" has invalid nextRun time: ${schedule.nextRun}, skipping`);
+            continue;
+          }
+          
           const isDue = nextRun <= currentTime;
           
           console.log(`⏰ [VERCEL CRON] Schedule "${schedule.name}": Next run ${nextRun.toISOString()}, Due: ${isDue}`);
           
           if (isDue) {
             console.log(`🎯 [VERCEL CRON] Executing due schedule: ${schedule.name}`);
-            await this.executeScheduledScraping(schedule.id);
+            await this.executeScheduledScraping(schedule.id as string);
             executedSchedules.push({
-              id: schedule.id,
-              name: schedule.name,
+              id: schedule.id as string,
+              name: schedule.name as string,
               executedAt: currentTime.toISOString()
             });
           }

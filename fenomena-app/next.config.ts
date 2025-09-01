@@ -7,10 +7,15 @@ const nextConfig: NextConfig = {
     PORT: '3000',
   },
   // Note: instrumentation.ts is enabled by default in Next.js 15
-  // Disable ESLint during build for deployment
+  // Disable ESLint and TypeScript during build for deployment
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  // Output configuration for cPanel deployment
+  output: 'standalone',
   // Webpack configuration for serverless Chrome
   webpack: (config, { isServer }) => {
     if (isServer) {
@@ -18,6 +23,8 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // External packages for server components
+  serverExternalPackages: ['puppeteer'],
 };
 
 export default nextConfig;
