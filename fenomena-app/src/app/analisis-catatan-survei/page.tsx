@@ -46,13 +46,19 @@ export default function AnalisisCatatanSurveiPage() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState({
-    categoryId: 'all',
+    categoryId: '',
+    regionId: 'all',
+    startDate: '',
+    endDate: '',
+  });
+  const [appliedFilters, setAppliedFilters] = useState({
+    categoryId: '',
     regionId: 'all',
     startDate: '',
     endDate: '',
@@ -65,11 +71,7 @@ export default function AnalisisCatatanSurveiPage() {
     fetchInitialData();
   }, []);
 
-  useEffect(() => {
-    if (initialDataLoaded) {
-      fetchAnalysisData();
-    }
-  }, [filters, initialDataLoaded]);
+  // Removed auto-analysis on initial load - analysis should only run when user applies filters
 
   const fetchInitialData = async () => {
     try {
@@ -89,26 +91,34 @@ export default function AnalisisCatatanSurveiPage() {
       }
 
 
-      // Mark initial data as loaded and fetch analysis data
+      // Mark initial data as loaded - do not auto-fetch analysis data
       setInitialDataLoaded(true);
+      setLoading(false);
     } catch (error) {
       setError('Failed to load initial data');
       setLoading(false);
     }
   };
 
-  const fetchAnalysisData = async (keywords: string = customKeywords) => {
+  const fetchAnalysisData = async (keywords: string = customKeywords, filtersToUse?: typeof filters) => {
     try {
       setLoading(true);
       
+      // Use passed filters or fall back to appliedFilters
+      const activeFilters = filtersToUse || appliedFilters;
+      
       const params = new URLSearchParams();
-      if (filters.categoryId !== 'all') params.append('categoryId', filters.categoryId);
-      if (filters.regionId !== 'all') params.append('regionId', filters.regionId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
+      if (activeFilters.categoryId && activeFilters.categoryId !== 'all') {
+        params.append('categoryId', activeFilters.categoryId);
+      }
+      if (activeFilters.regionId !== 'all') params.append('regionId', activeFilters.regionId);
+      if (activeFilters.startDate) params.append('startDate', activeFilters.startDate);
+      if (activeFilters.endDate) params.append('endDate', activeFilters.endDate);
       if (keywords.trim()) params.append('customKeywords', keywords.trim());
       
-      const response = await fetch(`/api/analytics/catatan-survei?${params.toString()}`, {
+      const apiUrl = `/api/analytics/catatan-survei?${params.toString()}`;
+      
+      const response = await fetch(apiUrl, {
         credentials: 'include'
       });
       
@@ -130,15 +140,32 @@ export default function AnalisisCatatanSurveiPage() {
     fetchAnalysisData(customKeywords);
   };
 
+  const handleApplyFilters = () => {
+    if (!filters.categoryId) {
+      setError('Pilih kategori survei terlebih dahulu');
+      return;
+    }
+    
+    const newAppliedFilters = { ...filters };
+    setAppliedFilters(newAppliedFilters);
+    setError('');
+    
+    // Pass filters directly to avoid race condition with state update
+    fetchAnalysisData(customKeywords, newAppliedFilters);
+  };
+
   const resetFilters = () => {
-    setFilters({
-      categoryId: 'all',
+    const resetFilterState = {
+      categoryId: '',
       regionId: 'all',
       startDate: '',
       endDate: '',
-    });
+    };
+    setFilters(resetFilterState);
+    setAppliedFilters(resetFilterState);
     setCustomKeywords('');
-    fetchAnalysisData('');
+    setError('');
+    // Do not auto-fetch data on reset - user must click "Terapkan Filter"
   };
 
   if (loading) {
@@ -146,7 +173,7 @@ export default function AnalisisCatatanSurveiPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <div className="text-lg">Menganalisis data catatan survei...</div>
+          <div className="text-lg">Memproses filter analisis...</div>
         </div>
       </div>
     );
@@ -172,10 +199,10 @@ export default function AnalisisCatatanSurveiPage() {
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <div className="text-red-600 text-lg mb-4">{error}</div>
             <button
-              onClick={() => fetchAnalysisData()}
+              onClick={() => window.location.reload()}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             >
-              Coba Lagi
+              Muat Ulang Halaman
             </button>
           </div>
         </div>
@@ -203,13 +230,10 @@ export default function AnalisisCatatanSurveiPage() {
         <div className="bg-white p-6 rounded-lg shadow mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Filter Analisis</h2>
-            {analysisData?.filterInfo.isFiltered && (
-              <button
-                onClick={resetFilters}
-                className="text-blue-600 hover:text-blue-800 text-sm"
-              >
-                Reset Filter
-              </button>
+            {(appliedFilters.categoryId || appliedFilters.regionId !== 'all' || appliedFilters.startDate || appliedFilters.endDate) && (
+              <span className="text-sm text-green-600 font-medium">
+                ✓ Filter Aktif
+              </span>
             )}
           </div>
           
@@ -223,7 +247,7 @@ export default function AnalisisCatatanSurveiPage() {
                 onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="all">Semua Kategori</option>
+                <option value="">Pilih Kategori Survei</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -274,6 +298,50 @@ export default function AnalisisCatatanSurveiPage() {
               </select>
             </div>
           </div>
+          
+          {/* Filter Action Buttons */}
+          <div className="mt-4 flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={handleApplyFilters}
+              disabled={!filters.categoryId || loading}
+              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {loading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Memproses...
+                </div>
+              ) : (
+                'Terapkan Filter'
+              )}
+            </button>
+            
+            {(appliedFilters.categoryId || appliedFilters.regionId !== 'all' || appliedFilters.startDate || appliedFilters.endDate) && (
+              <button
+                onClick={resetFilters}
+                className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
+          
+          {/* Filter Status Info */}
+          {!filters.categoryId && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                ⚠️ Pilih kategori survei terlebih dahulu, kemudian klik "Terapkan Filter" untuk melihat analisis.
+              </p>
+            </div>
+          )}
+          
+          {filters.categoryId && (JSON.stringify(filters) !== JSON.stringify(appliedFilters)) && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-800">
+                💡 Filter telah diubah. Klik "Terapkan Filter" untuk melihat hasil analisis yang baru.
+              </p>
+            </div>
+          )}
         </div>
 
         {analysisData ? (
@@ -491,11 +559,18 @@ export default function AnalisisCatatanSurveiPage() {
         ) : !loading && (
           <div className="bg-white p-12 rounded-lg shadow text-center">
             <div className="text-gray-500 text-lg mb-4">
-              {analysisData && (analysisData as any).totalCatatanSurvei === 0 
-                ? 'Tidak ada data catatan survei yang ditemukan untuk filter yang dipilih.'
-                : 'Memuat data analisis...'}
+              {!appliedFilters.categoryId 
+                ? 'Pilih kategori survei dan klik "Terapkan Filter" untuk melihat analisis.'
+                : analysisData && (analysisData as any).totalCatatanSurvei === 0 
+                  ? 'Tidak ada data catatan survei yang ditemukan untuk filter yang dipilih.'
+                  : 'Memuat data analisis...'}
             </div>
-            {analysisData && (analysisData as any).totalCatatanSurvei === 0 && (
+            {!appliedFilters.categoryId && (
+              <div className="text-sm text-gray-400 mt-2">
+                Data analisis hanya akan dimuat setelah Anda memilih kategori survei dan menerapkan filter.
+              </div>
+            )}
+            {analysisData && (analysisData as any).totalCatatanSurvei === 0 && appliedFilters.categoryId && (
               <button
                 onClick={resetFilters}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

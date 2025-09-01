@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch regions' }, { status: 500 });
     }
 
-    return NextResponse.json({ regions });
+    return NextResponse.json(regions);
 
   } catch (error: any) {
     console.error('Get regions error:', error);

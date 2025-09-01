@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const schedules = await schedulerService.getAllSchedules();
-    const schedule = schedules.find(s => s.id === id);
+    const schedule = schedules.find(s => (s as any).id === id);
 
     if (!schedule) {
       return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });

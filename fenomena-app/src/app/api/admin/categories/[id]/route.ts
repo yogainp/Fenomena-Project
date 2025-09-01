@@ -45,7 +45,7 @@ export async function GET(
     }
 
     const categoryWithCount = {
-      ...category,
+      ...(category || {}),
       _count: {
         phenomena: phenomenaCount || 0,
       },
@@ -108,16 +108,18 @@ export async function PUT(
     }
 
     // Update category
-    const { data: category, error: updateError } = await supabase
+    const updateData: any = {
+      name: validatedData.name,
+      description: validatedData.description || null,
+      periodeSurvei: validatedData.periodeSurvei || null,
+      startDate: validatedData.startDate || null,
+      endDate: validatedData.endDate || null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const { data: category, error: updateError } = await (supabase as any)
       .from('survey_categories')
-      .update({
-        name: validatedData.name,
-        description: validatedData.description || null,
-        periodeSurvei: validatedData.periodeSurvei || null,
-        startDate: validatedData.startDate || null,
-        endDate: validatedData.endDate || null,
-        updatedAt: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
