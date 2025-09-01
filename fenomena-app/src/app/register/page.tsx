@@ -37,7 +37,7 @@ export default function RegisterPage() {
       
       if (response.ok) {
         const data = await response.json();
-        setRegions(data.regions);
+        setRegions(data);
       } else {
         console.error('Failed to fetch regions');
       }
