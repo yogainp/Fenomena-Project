@@ -2,6 +2,14 @@
   "functions": {
     "pages/api/**/*.js": {
       "maxDuration": 60
+    },
+    "src/app/api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "src/app/api/admin/scrapping-berita/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -9,5 +17,13 @@
       "path": "/api/cron/execute-scheduled-scraping",
       "schedule": "0 8 * * *"
     }
-  ]
+  ],
+  "env": {
+    "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
+  },
+  "build": {
+    "env": {
+      "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true"
+    }
+  }
 }

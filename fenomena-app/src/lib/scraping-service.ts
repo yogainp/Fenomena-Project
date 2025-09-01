@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
+import { scrapeKalbarOnlineWithChromium } from './chromium-scraping-service';
 
 interface ScrapingOptions {
   portalUrl: string;
@@ -109,7 +110,7 @@ function parseIndonesianDate(dateString: string): Date {
       /(\d{1,2})\s+(\w+)\s+(\d{4})[,\s]+\d{1,2}[:.].\d{2}/i,
       // Bulan DD, YYYY (e.g., "Januari 15, 2024") - Less common but possible
       /(\w+)\s+(\d{1,2}),?\s+(\d{4})/i,
-      // DD-MM-YYYY or DD/MM/YYYY (Indonesian format)
+      // DD-MM-YYYY or DD/MM/YYYY (Indonesian format) - Most common for Kalbar Online
       /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/,
       // YYYY-MM-DD or YYYY/MM/DD (ISO format)
       /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/,
@@ -143,10 +144,11 @@ function parseIndonesianDate(dateString: string): Date {
           day = parseInt(match[2]);
           year = parseInt(match[3]);
         } else if (i === 6) {
-          // DD-MM-YYYY format
+          // DD-MM-YYYY or DD/MM/YYYY format (Indonesian format - common for Kalbar Online)
           day = parseInt(match[1]);
           month = parseInt(match[2]) - 1; // Convert to 0-based month
           year = parseInt(match[3]);
+          console.log(`Detected DD/MM/YYYY format: ${day}/${month + 1}/${year}`);
         } else {
           continue;
         }
@@ -412,9 +414,16 @@ async function scrapeKalbarOnline(
 ): Promise<void> {
   try {
     console.log(`[KALBARONLINE] Scraping page ${currentPage}: ${baseUrl}`);
+    
+    // IMPORTANT: Kalbar Online uses "View More" button for pagination which requires JavaScript.
+    // This Axios-based scraping will only get the initial 15 articles on the first load.
+    // For full pagination support, use browser automation (Playwright/Puppeteer) instead.
+    if (currentPage > 1) {
+      console.log(`[KALBARONLINE] WARNING: Page ${currentPage} may not load additional articles as Kalbar Online uses dynamic "View More" loading`);
+    }
 
-    // Find articles using Kalbar Online specific selectors
-    const articleElements = $('h2.entry-title, .gmr-archive, .site-main-archive article').toArray();
+    // Find articles using Kalbar Online specific selectors - Updated to use correct selector
+    const articleElements = $('.item-article').toArray();
     
     if (articleElements.length === 0) {
       console.log('[KALBARONLINE] No articles found on page, trying alternative selectors...');
@@ -435,18 +444,23 @@ async function scrapeKalbarOnline(
       try {
         const $article = $(articleElement);
         
-        // Extract title and link for Kalbar Online
+        // Extract title and link for Kalbar Online - Updated for .item-article structure
         let title: string, link: string;
         
-        const titleElement = $article.find('h2.entry-title a, .entry-title a, h2 a, h3 a').first();
+        // Look for title and link within .item-article structure
+        const titleElement = $article.find('h2 a, h3 a, .entry-title a, a[href*="/"]').first();
         if (titleElement.length) {
           title = cleanTextContent(titleElement.text());
           link = titleElement.attr('href') || '';
-        } else if ($article.is('a')) {
-          title = cleanTextContent($article.text());
-          link = $article.attr('href') || '';
         } else {
-          continue;
+          // Fallback: look for any link within the article item
+          const linkElement = $article.find('a').first();
+          if (linkElement.length) {
+            title = cleanTextContent(linkElement.text() || linkElement.attr('title') || '');
+            link = linkElement.attr('href') || '';
+          } else {
+            continue;
+          }
         }
         
         if (!title || !link || title.length < 10) {
@@ -466,18 +480,28 @@ async function scrapeKalbarOnline(
           continue; // Skip if no keywords match - don't even process further
         }
 
-        // Find date - Kalbar Online specific (DD/MM/YYYY format)
+        // Find date - Kalbar Online specific using correct selector
         let dateString = '';
-        const dateElement = $article.find('.gmr-metacontent, .entry-meta, .post-date, time').first();
+        // First try the specific selector mentioned by user
+        const dateElement = $article.find('time.entry-date.published, .entry-meta time, .posted-on time').first();
         if (dateElement.length) {
           dateString = dateElement.attr('datetime') || dateElement.text().trim();
         }
         
-        // If no date found, look in parent container
+        // If no date found, try broader selectors within the article
         if (!dateString) {
-          const nearbyDate = $article.closest('.gmr-archive, article, .post').find('.gmr-metacontent, .entry-meta, time').first();
+          const nearbyDate = $article.find('.entry-meta, .post-date, time, span[class*="date"]').first();
           if (nearbyDate.length) {
             dateString = nearbyDate.attr('datetime') || nearbyDate.text().trim();
+          }
+        }
+        
+        // Last fallback - look for any text that looks like a date in DD/MM/YYYY format
+        if (!dateString) {
+          const articleText = $article.text();
+          const dateMatch = articleText.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+          if (dateMatch) {
+            dateString = dateMatch[1];
           }
         }
 
@@ -849,6 +873,44 @@ function cleanTextContent(text: string): string {
 export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<ScrapingResult> {
   const { portalUrl, maxPages, delayMs } = options;
   
+  // SPECIAL ROUTING: Use Chromium for Kalbar Online dynamic loading
+  if (portalUrl.includes('kalbaronline')) {
+    console.log('[ROUTING] 🚀 Using Chromium browser automation for Kalbar Online');
+    
+    try {
+      // Get active keywords for Chromium scraping
+      const activeKeywords = await getActiveKeywords();
+      const keywordList = activeKeywords.map(k => (k.keyword as string).toLowerCase());
+      
+      // Convert maxPages to maxViewMoreClicks (each click loads ~15 more articles)
+      const maxViewMoreClicks = Math.max(0, maxPages - 1); // Page 1 = 0 clicks, Page 2 = 1 click, etc.
+      
+      const chromiumResult = await scrapeKalbarOnlineWithChromium({
+        portalUrl,
+        maxViewMoreClicks,
+        keywords: keywordList,
+        delayMs
+      });
+      
+      // Convert ChromiumScrapingResult to ScrapingResult format
+      return {
+        success: chromiumResult.success,
+        totalScraped: chromiumResult.totalScraped,
+        newItems: chromiumResult.newItems,
+        duplicates: chromiumResult.duplicates,
+        errors: chromiumResult.errors,
+        scrapedItems: chromiumResult.scrapedItems,
+      };
+      
+    } catch (chromiumError) {
+      console.error('[ROUTING] ❌ Chromium scraping failed, falling back to Axios:', chromiumError);
+      // Continue with Axios fallback below
+    }
+  }
+  
+  // DEFAULT: Use Axios-based scraping for other portals or as fallback
+  console.log('[ROUTING] 📡 Using Axios-based scraping');
+  
   const result: ScrapingResult = {
     success: false,
     totalScraped: 0,
@@ -926,8 +988,13 @@ export async function scrapeNewsFromPortal(options: ScrapingOptions): Promise<Sc
           // Antara News pagination: kalbar/{page-number}
           pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/${currentPage}`;
         } else if (portalUrl.includes('kalbaronline')) {
-          // Kalbar Online pagination: /page/{page-number}
-          pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/page/${currentPage}`;
+          // Kalbar Online - Fixed to use berita-daerah URL, pagination handled by View More button
+          // Only scrape page 1 as dynamic loading requires browser automation
+          if (currentPage > 1) {
+            console.log(`[KALBARONLINE] Skipping page ${currentPage} - Dynamic loading requires browser automation`);
+            break;
+          }
+          pageUrl = portalUrl.includes('berita-daerah') ? portalUrl : 'https://kalbaronline.com/berita-daerah/';
         } else if (portalUrl.includes('suarakalbar')) {
           // Suara Kalbar pagination: /page/{page-number}
           pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}/page/${currentPage}`;

@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
       
-      // Check if Pontianak Post
-      if (!portalUrl.includes('pontianakpost.jawapos.com')) {
+      // Check if Kalbar Online (now supported with Chromium)
+      if (!portalUrl.includes('kalbaronline.com')) {
         return NextResponse.json({
-          error: 'Chromium scraping is only supported for Pontianak Post',
+          error: 'Chromium scraping is currently only supported for Kalbar Online',
           details: 'Please use Axios scraping for other portals.',
         }, { status: 400 });
       }
@@ -71,10 +71,11 @@ export async function POST(request: NextRequest) {
         
         try {
           // Dynamic import to avoid bundling chromium dependencies in production
-          const { scrapeNewsFromPortalChromium } = await import('@/lib/scraping-service-chromium');
-          scrapingResult = await scrapeNewsFromPortalChromium({
+          const { scrapeKalbarOnlineWithChromium } = await import('@/lib/chromium-scraping-service');
+          scrapingResult = await scrapeKalbarOnlineWithChromium({
             portalUrl,
-            maxPages,
+            maxViewMoreClicks: Math.max(0, maxPages - 1),
+            keywords: [], // Will be fetched from database
             delayMs,
           });
         } catch (dynamicImportError: any) {
