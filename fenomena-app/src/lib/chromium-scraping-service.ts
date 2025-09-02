@@ -3,6 +3,7 @@ import puppeteer from 'puppeteer-core';
 // @ts-ignore - Dynamic import based on environment
 const puppeteerFull = process.env.NODE_ENV === 'development' ? require('puppeteer') : null;
 import chromium from '@sparticuz/chromium';
+import { setTimeout } from 'node:timers/promises';
 import { saveScrapedArticle, incrementKeywordMatchCount, getActiveKeywords, checkExistingArticle } from './supabase-helpers';
 
 interface ScrapedNewsItem {
@@ -320,7 +321,7 @@ export async function scrapeKalbarOnlineWithChromium(options: ChromiumScrapingOp
         console.log(`[CHROMIUM] ✅ View More button clicked ${clickCount + 1}`);
         
         // Wait for new content to load
-        await page.waitForTimeout(3000 + Math.random() * 2000); // 3-5 seconds
+        await setTimeout(3000 + Math.random() * 2000); // 3-5 seconds
         
         // Wait for new articles to be loaded
         await page.waitForFunction(
@@ -337,7 +338,7 @@ export async function scrapeKalbarOnlineWithChromium(options: ChromiumScrapingOp
         
         // Add delay between clicks
         if (delayMs > 0 && clickCount < maxViewMoreClicks - 1) {
-          await page.waitForTimeout(delayMs);
+          await setTimeout(delayMs);
         }
         
       } catch (clickError) {
@@ -545,4 +546,327 @@ async function scrapeCurrentArticles(
     console.error('[CHROMIUM] Error scraping current articles:', error);
     result.errors.push(`Error scraping articles: ${error}`);
   }
+}
+
+// Interface for Pontianak Post scraping options
+interface PontianakPostScrapingOptions {
+  portalUrl: string;
+  maxPages: number;
+  keywords: string[];
+  delayMs: number;
+}
+
+// Main Chromium scraping function for Pontianak Post
+export async function scrapePontianakPostWithChromium(options: PontianakPostScrapingOptions): Promise<ChromiumScrapingResult> {
+  const { portalUrl, maxPages, keywords, delayMs } = options;
+  
+  const result: ChromiumScrapingResult = {
+    success: false,
+    totalScraped: 0,
+    newItems: 0,
+    duplicates: 0,
+    errors: [],
+    scrapedItems: [],
+  };
+
+  let browser: any = null;
+  
+  try {
+    console.log(`[CHROMIUM-PP] 🚀 Starting Pontianak Post scraping`);
+    console.log(`[CHROMIUM-PP] Target: ${portalUrl}`);
+    console.log(`[CHROMIUM-PP] Max Pages: ${maxPages}`);
+    console.log(`[CHROMIUM-PP] Delay: ${delayMs}ms`);
+    
+    // Get active keywords from database if not provided
+    const activeKeywords = keywords.length > 0 ? keywords : 
+      (await getActiveKeywords()).map(k => (k.keyword as string).toLowerCase());
+
+    if (activeKeywords.length === 0) {
+      throw new Error('No active keywords found. Please add keywords first.');
+    }
+
+    console.log(`[CHROMIUM-PP] Keywords: ${activeKeywords.length} active`);
+    
+    // Launch browser with same approach as Kalbar Online
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (isDevelopment && puppeteerFull) {
+      // Development mode: Use regular puppeteer
+      console.log('[CHROMIUM-PP] 🔧 Development mode: Using local puppeteer');
+      browser = await puppeteerFull.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-background-timer-throttling',
+        ],
+        defaultViewport: { 
+          width: 1024, 
+          height: 768
+        },
+        ignoreHTTPSErrors: true,
+        timeout: 30000,
+      });
+    } else {
+      // Production mode: Use @sparticuz/chromium for Vercel
+      console.log('[CHROMIUM-PP] 🚀 Production mode: Using @sparticuz/chromium');
+      browser = await puppeteer.launch({
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-acceleration',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+          '--window-size=1024,768',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--aggressive-cache-discard',
+        ],
+        defaultViewport: { 
+          width: 1024, 
+          height: 768
+        },
+        executablePath: await chromium.executablePath(),
+        headless: true,
+        ignoreHTTPSErrors: true,
+        timeout: 30000,
+      });
+    }
+    
+    const page = await browser.newPage();
+    
+    // Set user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Request interception for efficiency
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
+    
+    // Sets to track processed items
+    const processedUrls = new Set<string>();
+    const processedTitles = new Set<string>();
+    
+    // Scrape multiple pages
+    for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+      try {
+        const pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}?page=${currentPage}`;
+        console.log(`[CHROMIUM-PP] 📄 Scraping page ${currentPage}: ${pageUrl}`);
+        
+        await page.goto(pageUrl, { 
+          waitUntil: 'networkidle2', 
+          timeout: 30000 
+        });
+        
+        // Wait for content to load
+        await setTimeout(2000);
+        
+        // Extract articles using the correct selector for Pontianak Post
+        const articles = await page.evaluate(() => {
+          const articleElements = document.querySelectorAll('h2.latest__title');
+          const extractedArticles: any[] = [];
+          
+          for (const element of articleElements) {
+            try {
+              const linkElement = element.querySelector('a');
+              if (!linkElement) continue;
+              
+              const title = linkElement.textContent?.trim() || '';
+              const href = linkElement.getAttribute('href') || '';
+              
+              if (title.length > 5 && href) {
+                const fullLink = href.startsWith('http') ? href : 
+                  'https://pontianakpost.jawapos.com' + href;
+                
+                // Look for date in parent container
+                let dateString = '';
+                const parentContainer = element.closest('.latest__item');
+                if (parentContainer) {
+                  const dateElement = parentContainer.querySelector('.latest__date, date');
+                  if (dateElement) {
+                    dateString = dateElement.textContent?.trim() || '';
+                  }
+                }
+                
+                extractedArticles.push({
+                  title: title.replace(/\s+/g, ' ').trim(),
+                  link: fullLink,
+                  dateString: dateString
+                });
+              }
+            } catch (articleError) {
+              console.error('Error extracting article:', articleError);
+            }
+          }
+          
+          return extractedArticles;
+        });
+        
+        console.log(`[CHROMIUM-PP] 📰 Found ${articles.length} articles on page ${currentPage}`);
+        
+        if (articles.length === 0) {
+          console.log(`[CHROMIUM-PP] ⚠️ No articles found on page ${currentPage}, stopping pagination`);
+          break;
+        }
+        
+        // Process articles
+        for (const article of articles) {
+          try {
+            // Check if title matches any keywords
+            const titleLower = article.title.toLowerCase();
+            const matchedKeywords = activeKeywords.filter(keyword => 
+              titleLower.includes(keyword)
+            );
+            
+            if (matchedKeywords.length === 0) {
+              continue; // Skip if no keywords match
+            }
+            
+            console.log(`[CHROMIUM-PP] 🔍 Processing: "${article.title.substring(0, 60)}..." (Keywords: ${matchedKeywords.join(', ')})`);
+            
+            // Check for duplicates
+            if (await checkDuplicateArticle(article.title, article.link, processedUrls, processedTitles)) {
+              console.log(`[CHROMIUM-PP] ⚠️ Duplicate found, skipping: "${article.title.substring(0, 40)}..."`);
+              result.duplicates++;
+              continue;
+            }
+            
+            // Try to get article content
+            let content = '';
+            try {
+              const articleResponse = await page.goto(article.link, { timeout: 15000 });
+              if (articleResponse?.ok()) {
+                content = await page.evaluate(() => {
+                  // Common selectors for article content
+                  const selectors = [
+                    '.content p',
+                    '.article-content p', 
+                    '.entry-content p',
+                    'article p',
+                    '.post-content p',
+                    'p'
+                  ];
+                  
+                  for (const selector of selectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                      return Array.from(elements)
+                        .map(el => el.textContent?.trim())
+                        .filter(text => text && text.length > 20)
+                        .slice(0, 5) // First 5 paragraphs
+                        .join(' ');
+                    }
+                  }
+                  return '';
+                });
+              }
+            } catch (contentError) {
+              console.log(`[CHROMIUM-PP] ⚠️ Could not fetch content for: ${article.title.substring(0, 40)}...`);
+              content = article.title; // Fallback to title
+            }
+            
+            // Parse date
+            let parsedDate: Date;
+            try {
+              parsedDate = parseIndonesianDate(article.dateString);
+            } catch (dateError) {
+              console.log(`[CHROMIUM-PP] ⚠️ Could not parse date "${article.dateString}", using current date`);
+              parsedDate = new Date();
+            }
+            
+            // Save to database
+            try {
+              const newsItem: ScrapedNewsItem = {
+                title: article.title,
+                content: content || article.title,
+                link: article.link,
+                date: parsedDate,
+                portal: portalUrl,
+                matchedKeywords,
+              };
+              
+              await saveScrapedArticle({
+                idBerita: crypto.randomUUID(),
+                portalBerita: portalUrl,
+                linkBerita: article.link,
+                judul: article.title,
+                isi: content || article.title,
+                tanggalBerita: parsedDate,
+                matchedKeywords,
+              });
+              
+              // Update keyword match counts
+              const activeKeywordObjects = await getActiveKeywords();
+              for (const keyword of matchedKeywords) {
+                const keywordObj = activeKeywordObjects.find(k => 
+                  (k.keyword as string).toLowerCase() === keyword
+                );
+                if (keywordObj?.id) {
+                  await incrementKeywordMatchCount(keywordObj.id as string);
+                }
+              }
+              
+              result.scrapedItems.push(newsItem);
+              result.newItems++;
+              
+              // Add to processed sets
+              processedUrls.add(article.link.toLowerCase());
+              processedTitles.add(article.title.toLowerCase().trim());
+              
+              console.log(`[CHROMIUM-PP] ✅ Successfully scraped: "${article.title.substring(0, 50)}..." (Keywords: ${matchedKeywords.join(', ')})`);
+              
+            } catch (saveError) {
+              console.error('[CHROMIUM-PP] ❌ Error saving article:', saveError);
+              result.errors.push(`Failed to save article: ${article.title}`);
+            }
+            
+          } catch (articleError) {
+            console.error('[CHROMIUM-PP] ❌ Error processing article:', articleError);
+            result.errors.push(`Error processing article: ${article.title}`);
+          }
+        }
+        
+        result.totalScraped += articles.length;
+        
+        // Add delay between pages
+        if (currentPage < maxPages && delayMs > 0) {
+          console.log(`[CHROMIUM-PP] ⏸️ Waiting ${delayMs}ms before next page...`);
+          await setTimeout(delayMs);
+        }
+        
+      } catch (pageError) {
+        console.error(`[CHROMIUM-PP] ❌ Error scraping page ${currentPage}:`, pageError);
+        result.errors.push(`Error scraping page ${currentPage}: ${pageError}`);
+        break; // Stop on page errors
+      }
+    }
+    
+    result.success = result.errors.length === 0 || result.newItems > 0;
+    console.log(`[CHROMIUM-PP] 🎯 Scraping completed. Total: ${result.totalScraped}, New: ${result.newItems}, Duplicates: ${result.duplicates}`);
+
+  } catch (error: unknown) {
+    console.error('[CHROMIUM-PP] ❌ Scraping error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown scraping error';
+    result.errors.push(errorMessage);
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+
+  return result;
 }

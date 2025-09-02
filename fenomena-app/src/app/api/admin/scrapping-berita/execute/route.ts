@@ -53,10 +53,13 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
       
-      // Check if Kalbar Online (now supported with Chromium)
-      if (!portalUrl.includes('kalbaronline.com')) {
+      // Check if portal is supported for Chromium scraping
+      const isKalbarOnline = portalUrl.includes('kalbaronline.com');
+      const isPontianakPost = portalUrl.includes('pontianakpost.jawapos.com');
+      
+      if (!isKalbarOnline && !isPontianakPost) {
         return NextResponse.json({
-          error: 'Chromium scraping is currently only supported for Kalbar Online',
+          error: 'Chromium scraping is currently only supported for Kalbar Online and Pontianak Post',
           details: 'Please use Axios scraping for other portals.',
         }, { status: 400 });
       }
@@ -71,13 +74,24 @@ export async function POST(request: NextRequest) {
         
         try {
           // Dynamic import to avoid bundling chromium dependencies in production
-          const { scrapeKalbarOnlineWithChromium } = await import('@/lib/chromium-scraping-service');
-          scrapingResult = await scrapeKalbarOnlineWithChromium({
-            portalUrl,
-            maxViewMoreClicks: Math.max(0, maxPages - 1),
-            keywords: [], // Will be fetched from database
-            delayMs,
-          });
+          const chromiumService = await import('@/lib/chromium-scraping-service');
+          
+          // Route to appropriate scraping function based on portal
+          if (portalUrl.includes('kalbaronline.com')) {
+            scrapingResult = await chromiumService.scrapeKalbarOnlineWithChromium({
+              portalUrl,
+              maxViewMoreClicks: Math.max(0, maxPages - 1),
+              keywords: [], // Will be fetched from database
+              delayMs,
+            });
+          } else if (portalUrl.includes('pontianakpost.jawapos.com')) {
+            scrapingResult = await chromiumService.scrapePontianakPostWithChromium({
+              portalUrl,
+              maxPages,
+              keywords: [], // Will be fetched from database
+              delayMs,
+            });
+          }
         } catch (dynamicImportError: any) {
           console.error('[API] Failed to load chromium scraping service:', dynamicImportError);
           return NextResponse.json({
