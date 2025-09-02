@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (portal) {
-      query = query.ilike('portalBerita', `%${portal}%`);
+      query = query.eq('portalBerita', portal);
     }
 
     if (keyword) {

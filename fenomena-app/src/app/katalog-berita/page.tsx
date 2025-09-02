@@ -42,11 +42,11 @@ export default function KatalogBeritaPublicPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20); // Default 20 items per page
+  const [sortOrder, setSortOrder] = useState('desc');
 
   useEffect(() => {
     fetchBerita();
-  }, [currentPage, searchTerm, portalFilter, keywordFilter, dateFrom, dateTo]);
+  }, [currentPage, searchTerm, portalFilter, keywordFilter, dateFrom, dateTo, sortOrder]);
 
   const fetchBerita = async () => {
     try {
@@ -55,7 +55,7 @@ export default function KatalogBeritaPublicPage() {
       
       const params = new URLSearchParams({
         page: currentPage.toString(),
-        limit: '12',
+        limit: '10',
       });
       
       if (searchTerm) params.append('search', searchTerm);
@@ -63,6 +63,8 @@ export default function KatalogBeritaPublicPage() {
       if (keywordFilter) params.append('keyword', keywordFilter);
       if (dateFrom) params.append('dateFrom', dateFrom);
       if (dateTo) params.append('dateTo', dateTo);
+      params.append('sortBy', 'tanggalBerita');
+      params.append('sortOrder', sortOrder);
       
       const response = await fetch(`/api/katalog-berita?${params.toString()}`);
       
@@ -96,16 +98,18 @@ export default function KatalogBeritaPublicPage() {
     setKeywordFilter('');
     setDateFrom('');
     setDateTo('');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -114,329 +118,296 @@ export default function KatalogBeritaPublicPage() {
     if (portal.includes('kalbaronline')) return 'bg-green-100 text-green-800';
     if (portal.includes('antaranews')) return 'bg-red-100 text-red-800';
     if (portal.includes('suarakalbar')) return 'bg-purple-100 text-purple-800';
+    if (portal.includes('pontianak.tribunnews')) return 'bg-orange-100 text-orange-800';
     return 'bg-gray-100 text-gray-800';
   };
 
-  const getPortalName = (portal: string) => {
-    const portalMap: { [key: string]: string } = {
-      'pontianakpost.jawapos.com': 'Pontianak Post',
-      'kalbaronline.com': 'Kalbar Online',
-      'kalbar.antaranews.com': 'Antara News Kalbar',
-      'suarakalbar.co.id': 'Suara Kalbar'
-    };
-    return portalMap[portal] || portal;
+  const getPortalDisplayName = (portalDomain: string): string => {
+    if (portalDomain.includes('pontianakpost.jawapos.com')) return 'Pontianak Post';
+    if (portalDomain.includes('kalbaronline.com')) return 'Kalbar Online';
+    if (portalDomain.includes('kalbar.antaranews.com')) return 'Antara News Kalbar';
+    if (portalDomain.includes('suarakalbar.co.id')) return 'Suara Kalbar';
+    if (portalDomain.includes('pontianak.tribunnews.com')) return 'Tribun Pontianak';
+    return portalDomain;
   };
+
+  if (loading && beritaList.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <nav className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                  ← Back to Dashboard
+                </Link>
+                <h1 className="ml-4 text-xl font-semibold">Katalog Berita</h1>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-lg">Loading news...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
       <nav className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/dashboard" className="text-xl font-semibold text-blue-600 hover:text-blue-800">
-                ← Kembali ke Dashboard
+              <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
+                ← Back to Dashboard
               </Link>
-            </div>
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold">Katalog Berita</h1>
+              <h1 className="ml-4 text-xl font-semibold">Katalog Berita</h1>
             </div>
           </div>
         </div>
       </nav>
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Katalog Berita</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Browse dan cari koleksi berita yang telah dikumpulkan dari berbagai portal berita
-            </p>
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+            <button 
+              onClick={() => setError('')}
+              className="ml-4 text-red-700 hover:text-red-900"
+            >
+              ×
+            </button>
           </div>
+        )}
 
-          {/* Search and Filters */}
-          <div className="bg-white shadow rounded-lg mb-6">
-            <form onSubmit={handleSearch} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
-                    Cari Berita
-                  </label>
-                  <input
-                    type="text"
-                    id="search"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Cari berdasarkan judul atau isi berita..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+        {/* Search and Filter Section */}
+        <div className="bg-white p-6 rounded-lg shadow mb-6">
+          <form onSubmit={handleSearch} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <input
+                  type="text"
+                  placeholder="Search in title or content..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Portal</label>
+                <select
+                  value={portalFilter}
+                  onChange={(e) => setPortalFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Portals</option>
+                  <option value="https://pontianakpost.jawapos.com/daerah">Pontianak Post</option>
+                  <option value="https://kalbaronline.com/berita-daerah/">Kalbar Online</option>
+                  <option value="https://kalbar.antaranews.com/kalbar">Antara News Kalbar</option>
+                  <option value="https://www.suarakalbar.co.id/category/kalbar/">Suara Kalbar</option>
+                  <option value="https://pontianak.tribunnews.com/index-news/kalbar">Tribun Pontianak</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Keyword</label>
+                <input
+                  type="text"
+                  placeholder="Filter by keyword..."
+                  value={keywordFilter}
+                  onChange={(e) => setKeywordFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-                <div>
-                  <label htmlFor="portal" className="block text-sm font-medium text-gray-700 mb-1">
-                    Portal Berita
-                  </label>
-                  <select
-                    id="portal"
-                    value={portalFilter}
-                    onChange={(e) => setPortalFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Semua Portal</option>
-                    <option value="pontianakpost.jawapos.com">Pontianak Post</option>
-                    <option value="kalbaronline.com">Kalbar Online</option>
-                    <option value="kalbar.antaranews.com">Antara News Kalbar</option>
-                    <option value="suarakalbar.co.id">Suara Kalbar</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="keyword" className="block text-sm font-medium text-gray-700 mb-1">
-                    Keyword
-                  </label>
-                  <input
-                    type="text"
-                    id="keyword"
-                    value={keywordFilter}
-                    onChange={(e) => setKeywordFilter(e.target.value)}
-                    placeholder="Filter berdasarkan keyword..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 mb-1">
-                    Tanggal Dari
-                  </label>
-                  <input
-                    type="date"
-                    id="dateFrom"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 mb-1">
-                    Tanggal Sampai
-                  </label>
-                  <input
-                    type="date"
-                    id="dateTo"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="flex items-end space-x-2">
-                  <button
-                    type="submit"
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    Cari
-                  </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort by Date</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+              </div>
+              
+              <div className="flex items-end space-x-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Search
+                </button>
+                {(searchTerm || portalFilter || keywordFilter || dateFrom || dateTo || sortOrder !== 'desc') && (
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                    className="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600"
                   >
                     Reset
                   </button>
-                </div>
+                )}
               </div>
-            </form>
+            </div>
+          </form>
+        </div>
+
+        {/* Results Summary */}
+        {pagination && (
+          <div className="mb-6">
+            <p className="text-gray-600">
+              Showing {beritaList.length} of {pagination.totalBerita} news articles
+            </p>
           </div>
+        )}
 
-          {/* Results Summary */}
-          {pagination && (
-            <div className="mb-4">
-              <p className="text-sm text-gray-600">
-                Menampilkan {beritaList.length} dari {pagination.totalBerita} berita
-                {pagination.totalPages > 1 && ` (Halaman ${pagination.currentPage} dari ${pagination.totalPages})`}
-              </p>
+
+        {/* News List */}
+        <div className="space-y-6">
+          {beritaList.length === 0 && !loading ? (
+            <div className="bg-white rounded-lg shadow p-12 text-center">
+              <div className="text-gray-500 text-lg">No news articles found</div>
+              <p className="text-gray-400 mt-2">Try adjusting your search filters</p>
             </div>
-          )}
-
-          {/* Loading State */}
-          {loading && (
-            <div className="text-center py-8">
-              <div className="text-lg text-gray-600">Memuat berita...</div>
-            </div>
-          )}
-
-          {/* Error State */}
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-              <p>Error: {error}</p>
-            </div>
-          )}
-
-          {/* News Grid */}
-          {!loading && !error && (
-            <>
-              {beritaList.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">Tidak ada berita yang ditemukan.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {beritaList.map((berita) => (
-                    <div key={berita.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow">
-                      <div className="p-6">
-                        {/* Portal Badge */}
-                        <div className="mb-3">
-                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${getPortalColor(berita.portalBerita)}`}>
-                            {getPortalName(berita.portalBerita)}
-                          </span>
-                        </div>
-
-                        {/* Title */}
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                          {berita.judul}
+          ) : (
+            beritaList.map((berita) => (
+              <div key={berita.id} className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-start space-x-4">
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          <a 
+                            href={berita.linkBerita} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="hover:text-blue-600"
+                          >
+                            {berita.judul}
+                          </a>
                         </h3>
-
-                        {/* Content Preview */}
-                        <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+                        
+                        <p className="text-gray-600 text-sm mb-3 line-clamp-3">
                           {berita.isi}
                         </p>
-
-                        {/* Keywords */}
-                        {berita.matchedKeywords && Array.isArray(berita.matchedKeywords) && berita.matchedKeywords.length > 0 && (
-                          <div className="mb-4">
-                            <div className="flex flex-wrap gap-1">
-                              {berita.matchedKeywords.slice(0, 3).map((keyword, index) => (
-                                <span
-                                  key={index}
-                                  className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded-full"
-                                >
-                                  #{keyword}
-                                </span>
-                              ))}
-                              {berita.matchedKeywords.length > 3 && (
-                                <span className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
-                                  +{berita.matchedKeywords.length - 3} lainnya
-                                </span>
-                              )}
-                            </div>
+                        
+                        <div className="flex items-center flex-wrap gap-2 text-sm mb-3">
+                          <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                            {getPortalDisplayName(berita.portalBerita)}
+                          </span>
+                          <span className="text-gray-500">
+                            Published: {formatDate(berita.tanggalBerita)}
+                          </span>
+                          <span className="text-gray-500">
+                            Scraped: {formatDate(berita.tanggalScrap)}
+                          </span>
+                        </div>
+                        
+                        {berita.matchedKeywords && berita.matchedKeywords.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            <span className="text-xs text-gray-500 mr-2">Keywords:</span>
+                            {berita.matchedKeywords.map((keyword, index) => (
+                              <span 
+                                key={index}
+                                className="inline-flex px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded"
+                              >
+                                {keyword}
+                              </span>
+                            ))}
                           </div>
                         )}
-
-                        {/* Date */}
-                        <p className="text-xs text-gray-500 mb-4">
-                          {formatDate(berita.tanggalBerita)}
-                        </p>
-
-                        {/* Action Button */}
-                        <div className="flex justify-between items-center">
-                          <a
-                            href={berita.linkBerita}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-blue-600 text-white px-4 py-2 text-sm rounded hover:bg-blue-700 transition-colors"
-                          >
-                            Baca Selengkapnya
-                          </a>
-                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col space-y-2 ml-4">
+                        <a 
+                          href={berita.linkBerita} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                        >
+                          View Original →
+                        </a>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              )}
+              </div>
+            ))
+          )}
+        </div>
 
-              {/* Pagination */}
-              {pagination && pagination.totalPages > 1 && (
-                <div className="mt-8 flex justify-center items-center space-x-2">
+        {/* Pagination */}
+        {pagination && pagination.totalPages > 1 && (
+          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-6 rounded-lg shadow">
+            <div className="flex-1 flex justify-between sm:hidden">
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={!pagination.hasPrevPage}
+                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={!pagination.hasNextPage}
+                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Showing page <span className="font-medium">{pagination.currentPage}</span> of{' '}
+                  <span className="font-medium">{pagination.totalPages}</span> ({pagination.totalBerita} total articles)
+                </p>
+              </div>
+              <div>
+                <div className="flex space-x-2">
                   <button
                     onClick={() => setCurrentPage(currentPage - 1)}
                     disabled={!pagination.hasPrevPage}
-                    className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ← Sebelumnya
+                    Previous
                   </button>
-
-                  <div className="flex space-x-1">
-                    {(() => {
-                      const maxVisible = 5;
-                      const totalPages = pagination.totalPages;
-                      let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-                      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-                      
-                      // Adjust start page if we're near the end
-                      if (endPage - startPage + 1 < maxVisible) {
-                        startPage = Math.max(1, endPage - maxVisible + 1);
-                      }
-                      
-                      const pages = Array.from(
-                        { length: endPage - startPage + 1 }, 
-                        (_, i) => startPage + i
-                      );
-                      
-                      return (
-                        <>
-                          {/* First page + ellipsis if needed */}
-                          {startPage > 1 && (
-                            <>
-                              <button
-                                onClick={() => setCurrentPage(1)}
-                                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                              >
-                                1
-                              </button>
-                              {startPage > 2 && (
-                                <span className="px-2 py-2 text-sm text-gray-500">...</span>
-                              )}
-                            </>
-                          )}
-                          
-                          {/* Visible page numbers */}
-                          {pages.map((pageNumber) => (
-                            <button
-                              key={pageNumber}
-                              onClick={() => setCurrentPage(pageNumber)}
-                              className={`px-3 py-2 text-sm rounded-md ${
-                                currentPage === pageNumber
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-white border border-gray-300 hover:bg-gray-50'
-                              }`}
-                            >
-                              {pageNumber}
-                            </button>
-                          ))}
-                          
-                          {/* Ellipsis + last page if needed */}
-                          {endPage < totalPages && (
-                            <>
-                              {endPage < totalPages - 1 && (
-                                <span className="px-2 py-2 text-sm text-gray-500">...</span>
-                              )}
-                              <button
-                                onClick={() => setCurrentPage(totalPages)}
-                                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                              >
-                                {totalPages}
-                              </button>
-                            </>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-
                   <button
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={!pagination.hasNextPage}
-                    className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Selanjutnya →
+                    Next
                   </button>
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

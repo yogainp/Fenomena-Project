@@ -18,14 +18,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon-16x16.svg', sizes: '16x16', type: 'image/svg+xml' },
-      { url: '/favicon-32x32.svg', sizes: '32x32', type: 'image/svg+xml' },
-      { url: '/favicon.ico', sizes: 'any' }
+      { url: '/favicon-32x32.svg', sizes: '32x32', type: 'image/svg+xml' }
     ],
     apple: [
       { url: '/apple-touch-icon.svg', sizes: '180x180', type: 'image/svg+xml' }
-    ],
-    other: [
-      { url: '/fenomena-logo.svg', sizes: 'any', type: 'image/svg+xml' }
     ]
   }
 };

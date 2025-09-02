@@ -75,6 +75,12 @@ export default function ScrappingBeritaPage() {
       url: 'https://pontianakpost.jawapos.com/daerah',
       engine: 'chromium',
       description: 'Manual scraping dengan browser real untuk Pontianak Post (localhost only)'
+    },
+    {
+      name: 'Chromium - Tribun Pontianak',
+      url: 'https://pontianak.tribunnews.com/index-news/kalbar',
+      engine: 'chromium',
+      description: 'Manual scraping dengan browser real untuk Tribun Pontianak (localhost only)'
     }
   ];
 

@@ -9,7 +9,8 @@ const ALLOWED_PORTALS = [
   'https://pontianakpost.jawapos.com/daerah',
   'https://kalbaronline.com/berita-daerah/',
   'https://kalbar.antaranews.com/kalbar',
-  'https://www.suarakalbar.co.id/category/kalbar/'
+  'https://www.suarakalbar.co.id/category/kalbar/',
+  'https://pontianak.tribunnews.com/index-news/kalbar'
 ];
 
 const executeScrapingSchema = z.object({
@@ -46,10 +47,11 @@ export async function POST(request: NextRequest) {
       // Check if portal is supported for Chromium scraping
       const isKalbarOnline = portalUrl.includes('kalbaronline.com');
       const isPontianakPost = portalUrl.includes('pontianakpost.jawapos.com');
+      const isTribunPontianak = portalUrl.includes('pontianak.tribunnews.com');
       
-      if (!isKalbarOnline && !isPontianakPost) {
+      if (!isKalbarOnline && !isPontianakPost && !isTribunPontianak) {
         return NextResponse.json({
-          error: 'Chromium scraping is currently only supported for Kalbar Online and Pontianak Post',
+          error: 'Chromium scraping is currently only supported for Kalbar Online, Pontianak Post, and Tribun Pontianak',
           details: 'Please use Axios scraping for other portals.',
         }, { status: 400 });
       }
@@ -85,6 +87,20 @@ export async function POST(request: NextRequest) {
               delayMs,
             });
             console.log('[API] Pontianak Post scraping completed:', {
+              success: scrapingResult?.success,
+              totalScraped: scrapingResult?.totalScraped,
+              newItems: scrapingResult?.newItems,
+              errors: scrapingResult?.errors?.length || 0
+            });
+          } else if (portalUrl.includes('pontianak.tribunnews.com')) {
+            console.log('[API] Executing Tribun Pontianak Chromium scraping...');
+            scrapingResult = await chromiumService.scrapeTribunPontianakWithChromium({
+              portalUrl,
+              maxPages,
+              keywords: [], // Will be fetched from database
+              delayMs,
+            });
+            console.log('[API] Tribun Pontianak scraping completed:', {
               success: scrapingResult?.success,
               totalScraped: scrapingResult?.totalScraped,
               newItems: scrapingResult?.newItems,

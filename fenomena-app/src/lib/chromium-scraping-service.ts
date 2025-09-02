@@ -556,6 +556,14 @@ interface PontianakPostScrapingOptions {
   delayMs: number;
 }
 
+// Interface for Tribun Pontianak scraping options
+interface TribunPontianakScrapingOptions {
+  portalUrl: string;
+  maxPages: number;
+  keywords: string[];
+  delayMs: number;
+}
+
 // Main Chromium scraping function for Pontianak Post
 export async function scrapePontianakPostWithChromium(options: PontianakPostScrapingOptions): Promise<ChromiumScrapingResult> {
   const { portalUrl, maxPages, keywords, delayMs } = options;
@@ -860,6 +868,395 @@ export async function scrapePontianakPostWithChromium(options: PontianakPostScra
 
   } catch (error: unknown) {
     console.error('[CHROMIUM-PP] ❌ Scraping error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown scraping error';
+    result.errors.push(errorMessage);
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+
+  return result;
+}
+
+// Main Chromium scraping function for Tribun Pontianak
+export async function scrapeTribunPontianakWithChromium(options: TribunPontianakScrapingOptions): Promise<ChromiumScrapingResult> {
+  const { portalUrl, maxPages, keywords, delayMs } = options;
+  
+  const result: ChromiumScrapingResult = {
+    success: false,
+    totalScraped: 0,
+    newItems: 0,
+    duplicates: 0,
+    errors: [],
+    scrapedItems: [],
+  };
+
+  let browser: any = null;
+  
+  try {
+    console.log(`[CHROMIUM-TP] 🚀 Starting Tribun Pontianak scraping`);
+    console.log(`[CHROMIUM-TP] Target: ${portalUrl}`);
+    console.log(`[CHROMIUM-TP] Max Pages: ${maxPages}`);
+    console.log(`[CHROMIUM-TP] Delay: ${delayMs}ms`);
+    
+    // Get active keywords from database if not provided
+    const activeKeywords = keywords.length > 0 ? keywords : 
+      (await getActiveKeywords()).map(k => (k.keyword as string).toLowerCase());
+
+    if (activeKeywords.length === 0) {
+      throw new Error('No active keywords found. Please add keywords first.');
+    }
+
+    console.log(`[CHROMIUM-TP] Keywords: ${activeKeywords.length} active`);
+    
+    // Launch browser with same approach as other portals
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (isDevelopment && puppeteerFull) {
+      // Development mode: Use regular puppeteer
+      console.log('[CHROMIUM-TP] 🔧 Development mode: Using local puppeteer');
+      browser = await puppeteerFull.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-background-timer-throttling',
+        ],
+        defaultViewport: { 
+          width: 1024, 
+          height: 768
+        },
+        ignoreHTTPSErrors: true,
+        timeout: 30000,
+      });
+    } else {
+      // Production mode: Use @sparticuz/chromium for Vercel
+      console.log('[CHROMIUM-TP] 🚀 Production mode: Using @sparticuz/chromium');
+      browser = await puppeteer.launch({
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-acceleration',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+          '--window-size=1024,768',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--aggressive-cache-discard',
+        ],
+        defaultViewport: { 
+          width: 1024, 
+          height: 768
+        },
+        executablePath: await chromium.executablePath(),
+        headless: true,
+        ignoreHTTPSErrors: true,
+        timeout: 30000,
+      });
+    }
+    
+    const page = await browser.newPage();
+    
+    // Set user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Request interception for efficiency
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
+    
+    // Sets to track processed items
+    const processedUrls = new Set<string>();
+    const processedTitles = new Set<string>();
+    
+    // Scrape multiple pages
+    for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+      try {
+        const pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}?page=${currentPage}`;
+        console.log(`[CHROMIUM-TP] 📄 Scraping page ${currentPage}: ${pageUrl}`);
+        
+        await page.goto(pageUrl, { 
+          waitUntil: 'networkidle2', 
+          timeout: 30000 
+        });
+        
+        // Wait for content to load
+        await setTimeout(2000);
+        
+        // Extract articles using the specific selectors for Tribun Pontianak
+        const articles = await page.evaluate(() => {
+          // Look for article containers using various selectors
+          const articleSelectors = [
+            'body > div.main > div.content > div.fl.w677 > div > div:nth-child(2) > div.pt10.pb10 > ul > li',
+            '.pt10.pb10 ul li',
+            'ul li h3',
+            'li'
+          ];
+          
+          let articleElements: Element[] = [];
+          
+          // Try different selectors to find articles
+          for (const selector of articleSelectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              articleElements = Array.from(elements);
+              break;
+            }
+          }
+          
+          const extractedArticles: any[] = [];
+          
+          for (const element of articleElements) {
+            try {
+              // Extract title using the specific selector or alternatives
+              let titleElement = element.querySelector('h3');
+              if (!titleElement) {
+                titleElement = element.querySelector('h2, h4, a[href*="pontianak.tribunnews.com"]');
+              }
+              
+              if (!titleElement) continue;
+              
+              let linkElement = titleElement.querySelector('a') || titleElement;
+              if (linkElement.tagName !== 'A') {
+                linkElement = element.querySelector('a[href*="pontianak.tribunnews.com"]');
+              }
+              
+              if (!linkElement) continue;
+              
+              const title = titleElement.textContent?.trim() || '';
+              const href = linkElement.getAttribute('href') || '';
+              
+              if (title.length > 5 && href) {
+                const fullLink = href.startsWith('http') ? href : 
+                  'https://pontianak.tribunnews.com' + href;
+                
+                // Extract date using the specific selector or alternatives
+                let dateString = '';
+                const dateElement = element.querySelector('time') || 
+                                   element.querySelector('.date, .tanggal, [class*="date"], [class*="time"]');
+                if (dateElement) {
+                  dateString = dateElement.getAttribute('datetime') || 
+                               dateElement.textContent?.trim() || '';
+                }
+                
+                // Fallback: look for date pattern in element text
+                if (!dateString) {
+                  const elementText = element.textContent || '';
+                  const dateMatch = elementText.match(/(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}-\d{1,2}-\d{4}|\d{1,2}\s+\w+\s+\d{4})/);
+                  if (dateMatch) {
+                    dateString = dateMatch[1];
+                  }
+                }
+                
+                extractedArticles.push({
+                  title: title.replace(/\s+/g, ' ').trim(),
+                  link: fullLink,
+                  dateString: dateString
+                });
+              }
+            } catch (articleError) {
+              console.error('Error extracting article:', articleError);
+            }
+          }
+          
+          return extractedArticles;
+        });
+        
+        console.log(`[CHROMIUM-TP] 📰 Found ${articles.length} articles on page ${currentPage}`);
+        
+        if (articles.length === 0) {
+          console.log(`[CHROMIUM-TP] ⚠️ No articles found on page ${currentPage}, stopping pagination`);
+          break;
+        }
+        
+        // Process articles
+        for (const article of articles) {
+          try {
+            // Check if title matches any keywords
+            const titleLower = article.title.toLowerCase();
+            const matchedKeywords = activeKeywords.filter(keyword => 
+              titleLower.includes(keyword)
+            );
+            
+            if (matchedKeywords.length === 0) {
+              continue; // Skip if no keywords match
+            }
+            
+            console.log(`[CHROMIUM-TP] 🔍 Processing: "${article.title.substring(0, 60)}..." (Keywords: ${matchedKeywords.join(', ')})`);
+            
+            // Check for duplicates
+            if (await checkDuplicateArticle(article.title, article.link, processedUrls, processedTitles)) {
+              console.log(`[CHROMIUM-TP] ⚠️ Duplicate found, skipping: "${article.title.substring(0, 40)}..."`);
+              result.duplicates++;
+              continue;
+            }
+            
+            // Try to get article content
+            let content = '';
+            try {
+              const articleResponse = await page.goto(article.link, { timeout: 15000 });
+              if (articleResponse?.ok()) {
+                content = await page.evaluate(() => {
+                  // Common selectors for article content in Tribun sites
+                  const selectors = [
+                    '.txt-article p',
+                    '.artikel p',
+                    '.content p',
+                    '.article-content p', 
+                    '.entry-content p',
+                    'article p',
+                    '.post-content p',
+                    'p'
+                  ];
+                  
+                  for (const selector of selectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                      return Array.from(elements)
+                        .map(el => el.textContent?.trim())
+                        .filter(text => text && text.length > 20)
+                        .slice(0, 5) // First 5 paragraphs
+                        .join(' ');
+                    }
+                  }
+                  return '';
+                });
+              }
+            } catch (contentError) {
+              console.log(`[CHROMIUM-TP] ⚠️ Could not fetch content for: ${article.title.substring(0, 40)}...`);
+              content = article.title; // Fallback to title
+            }
+            
+            // Parse date
+            let parsedDate: Date;
+            try {
+              parsedDate = parseIndonesianDate(article.dateString);
+            } catch (dateError) {
+              console.log(`[CHROMIUM-TP] ⚠️ Could not parse date "${article.dateString}", using current date`);
+              parsedDate = new Date();
+            }
+            
+            // Save to database
+            try {
+              const newsItem: ScrapedNewsItem = {
+                title: article.title,
+                content: content || article.title,
+                link: article.link,
+                date: parsedDate,
+                portal: portalUrl,
+                matchedKeywords,
+              };
+              
+              await saveScrapedArticle({
+                idBerita: crypto.randomUUID(),
+                portalBerita: portalUrl,
+                linkBerita: article.link,
+                judul: article.title,
+                isi: content || article.title,
+                tanggalBerita: parsedDate,
+                matchedKeywords,
+              });
+              
+              // Update keyword match counts
+              const activeKeywordObjects = await getActiveKeywords();
+              for (const keyword of matchedKeywords) {
+                const keywordObj = activeKeywordObjects.find(k => 
+                  (k.keyword as string).toLowerCase() === keyword
+                );
+                if (keywordObj?.id) {
+                  await incrementKeywordMatchCount(keywordObj.id as string);
+                }
+              }
+              
+              result.scrapedItems.push(newsItem);
+              result.newItems++;
+              
+              // Add to processed sets
+              processedUrls.add(article.link.toLowerCase());
+              processedTitles.add(article.title.toLowerCase().trim());
+              
+              console.log(`[CHROMIUM-TP] ✅ Successfully scraped: "${article.title.substring(0, 50)}..." (Keywords: ${matchedKeywords.join(', ')})`);
+              
+            } catch (saveError) {
+              console.error('[CHROMIUM-TP] ❌ Error saving article:', saveError);
+              result.errors.push(`Failed to save article: ${article.title}`);
+            }
+            
+          } catch (articleError) {
+            console.error('[CHROMIUM-TP] ❌ Error processing article:', articleError);
+            result.errors.push(`Error processing article: ${article.title}`);
+          }
+        }
+        
+        result.totalScraped += articles.length;
+        
+        // Check for pagination and handle next page
+        try {
+          const hasNextPage = await page.evaluate(() => {
+            // Look for pagination using the specific selector or alternatives
+            const paginationSelectors = [
+              '#paginga > div.paging',
+              '.paging',
+              '.pagination',
+              '[class*="paging"]',
+              '[class*="pagination"]'
+            ];
+            
+            for (const selector of paginationSelectors) {
+              const pagingElement = document.querySelector(selector);
+              if (pagingElement) {
+                // Look for next page link
+                const nextLink = pagingElement.querySelector('a[href*="page"]') ||
+                                pagingElement.querySelector('a:last-child') ||
+                                pagingElement.querySelector('.next, .selanjutnya');
+                return !!nextLink;
+              }
+            }
+            return false;
+          });
+          
+          if (!hasNextPage && currentPage >= maxPages) {
+            console.log(`[CHROMIUM-TP] 📄 No more pages available after page ${currentPage}`);
+            break;
+          }
+          
+        } catch (paginationError) {
+          console.log(`[CHROMIUM-TP] ⚠️ Could not check pagination, continuing...`);
+        }
+        
+        // Add delay between pages
+        if (currentPage < maxPages && delayMs > 0) {
+          console.log(`[CHROMIUM-TP] ⏸️ Waiting ${delayMs}ms before next page...`);
+          await setTimeout(delayMs);
+        }
+        
+      } catch (pageError) {
+        console.error(`[CHROMIUM-TP] ❌ Error scraping page ${currentPage}:`, pageError);
+        result.errors.push(`Error scraping page ${currentPage}: ${pageError}`);
+        break; // Stop on page errors
+      }
+    }
+    
+    result.success = result.errors.length === 0 || result.newItems > 0;
+    console.log(`[CHROMIUM-TP] 🎯 Scraping completed. Total: ${result.totalScraped}, New: ${result.newItems}, Duplicates: ${result.duplicates}`);
+
+  } catch (error: unknown) {
+    console.error('[CHROMIUM-TP] ❌ Scraping error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown scraping error';
     result.errors.push(errorMessage);
   } finally {
