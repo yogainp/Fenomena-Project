@@ -43,16 +43,6 @@ export async function POST(request: NextRequest) {
 
     // Validate chromium usage
     if (scrapingEngine === 'chromium') {
-      // Check if we're in development environment
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      if (!isDevelopment) {
-        return NextResponse.json({
-          error: 'Chromium scraping is only available in development mode',
-          details: 'Chromium scraping requires puppeteer which is not available in production deployment. Please use Axios scraping for production or run this in localhost.',
-        }, { status: 400 });
-      }
-      
       // Check if portal is supported for Chromium scraping
       const isKalbarOnline = portalUrl.includes('kalbaronline.com');
       const isPontianakPost = portalUrl.includes('pontianakpost.jawapos.com');
@@ -63,6 +53,8 @@ export async function POST(request: NextRequest) {
           details: 'Please use Axios scraping for other portals.',
         }, { status: 400 });
       }
+      
+      console.log(`[API] 🚀 Chromium scraping enabled for ${portalUrl} (Environment: ${process.env.NODE_ENV || 'unknown'})`);
     }
 
     let scrapingResult;
