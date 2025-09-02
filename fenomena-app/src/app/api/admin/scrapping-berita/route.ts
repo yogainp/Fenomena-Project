@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
     const keyword = searchParams.get('keyword') || '';
+    const sortBy = searchParams.get('sortBy') || 'tanggalBerita';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
 
     const skip = (page - 1) * limit;
 
@@ -53,8 +55,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply ordering and pagination
+    const isAscending = sortOrder.toLowerCase() === 'asc';
     query = query
-      .order('tanggalBerita', { ascending: false })
+      .order(sortBy, { ascending: isAscending })
       .range(skip, skip + limit - 1);
 
     const { data: beritaList, error, count: totalBerita } = await query;

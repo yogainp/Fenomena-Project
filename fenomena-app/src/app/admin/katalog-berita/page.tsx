@@ -45,6 +45,7 @@ export default function KatalogBeritaPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState('desc');
   
   // Selection states
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -52,7 +53,7 @@ export default function KatalogBeritaPage() {
 
   useEffect(() => {
     fetchBerita();
-  }, [currentPage, searchTerm, portalFilter, keywordFilter, dateFrom, dateTo]);
+  }, [currentPage, searchTerm, portalFilter, keywordFilter, dateFrom, dateTo, sortOrder]);
 
   const fetchBerita = async () => {
     try {
@@ -69,6 +70,8 @@ export default function KatalogBeritaPage() {
       if (keywordFilter) params.append('keyword', keywordFilter);
       if (dateFrom) params.append('dateFrom', dateFrom);
       if (dateTo) params.append('dateTo', dateTo);
+      params.append('sortBy', 'tanggalBerita');
+      params.append('sortOrder', sortOrder);
       
       const response = await makeAuthenticatedRequest(`/api/admin/scrapping-berita?${params.toString()}`);
       
@@ -101,6 +104,7 @@ export default function KatalogBeritaPage() {
     setKeywordFilter('');
     setDateFrom('');
     setDateTo('');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
@@ -339,6 +343,18 @@ export default function KatalogBeritaPage() {
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sort by Date</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+              </div>
               
               <div className="flex items-end space-x-2">
                 <button
@@ -348,7 +364,7 @@ export default function KatalogBeritaPage() {
                 >
                   Search
                 </button>
-                {(searchTerm || portalFilter || keywordFilter || dateFrom || dateTo) && (
+                {(searchTerm || portalFilter || keywordFilter || dateFrom || dateTo || sortOrder !== 'desc') && (
                   <button
                     type="button"
                     onClick={resetFilters}
