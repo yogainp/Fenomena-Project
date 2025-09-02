@@ -77,11 +77,18 @@ export async function POST(request: NextRequest) {
               delayMs,
             });
           } else if (portalUrl.includes('pontianakpost.jawapos.com')) {
+            console.log('[API] Executing Pontianak Post Chromium scraping...');
             scrapingResult = await chromiumService.scrapePontianakPostWithChromium({
               portalUrl,
               maxPages,
               keywords: [], // Will be fetched from database
               delayMs,
+            });
+            console.log('[API] Pontianak Post scraping completed:', {
+              success: scrapingResult?.success,
+              totalScraped: scrapingResult?.totalScraped,
+              newItems: scrapingResult?.newItems,
+              errors: scrapingResult?.errors?.length || 0
             });
           }
         } catch (dynamicImportError: any) {
@@ -109,20 +116,61 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: 'Scraping executed successfully',
-      result: scrapingResult,
+    // Validate scraping result before returning
+    if (!scrapingResult) {
+      console.error('[API] No scraping result returned');
+      return NextResponse.json({
+        error: 'Scraping completed but no result returned',
+        details: 'The scraping function completed but did not return a valid result object.',
+      }, { status: 500 });
+    }
+
+    // Ensure result has required properties
+    const validatedResult = {
+      success: scrapingResult.success || false,
+      totalScraped: scrapingResult.totalScraped || 0,
+      newItems: scrapingResult.newItems || 0,
+      duplicates: scrapingResult.duplicates || 0,
+      errors: scrapingResult.errors || [],
+      scrapedItems: scrapingResult.scrapedItems || [],
+    };
+
+    console.log('[API] Returning validated result:', {
+      success: validatedResult.success,
+      totalScraped: validatedResult.totalScraped,
+      newItems: validatedResult.newItems,
+      duplicates: validatedResult.duplicates,
+      errorCount: validatedResult.errors.length
     });
+
+    const response = NextResponse.json({
+      message: 'Scraping executed successfully',
+      result: validatedResult,
+    });
+    
+    // Explicitly set Content-Type header
+    response.headers.set('Content-Type', 'application/json');
+    return response;
 
   } catch (error: any) {
     console.error('Execute scraping error:', error);
-    if (error.message.includes('required')) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
+    console.error('Error stack:', error.stack);
+    
+    // Ensure we always return a valid JSON response
+    const errorResponse = {
+      error: 'Scraping failed',
+      details: error?.message || 'An unexpected error occurred during scraping.',
+      timestamp: new Date().toISOString(),
+    };
+    
+    if (error.message?.includes('required')) {
+      return NextResponse.json(errorResponse, { status: 403 });
     }
-    if (error.message.includes('scraping')) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error.message?.includes('scraping')) {
+      return NextResponse.json(errorResponse, { status: 400 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }
 
