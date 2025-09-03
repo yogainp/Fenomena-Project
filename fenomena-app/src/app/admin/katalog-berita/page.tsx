@@ -202,6 +202,7 @@ export default function KatalogBeritaPage() {
       'pontianakpost.jawapos.com': 'Pontianak Post',
       'kalbaronline.com': 'Kalbar Online',
       'kalbar.antaranews.com': 'Antara News Kalbar',
+      'pontianak.tribunnews.com': 'Tribun Pontianak',
       'suarakalbar.co.id': 'Suara Kalbar'
     };
     return portalMap[portalDomain] || portalDomain;
@@ -309,6 +310,7 @@ export default function KatalogBeritaPage() {
                   <option value="pontianakpost.jawapos.com">Pontianak Post</option>
                   <option value="kalbaronline.com">Kalbar Online</option>
                   <option value="kalbar.antaranews.com">Antara News Kalbar</option>
+                  <option value="pontianak.tribunnews.com">Tribun Pontianak</option>
                   <option value="suarakalbar.co.id">Suara Kalbar</option>
                 </select>
               </div>

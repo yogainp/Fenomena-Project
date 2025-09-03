@@ -51,6 +51,11 @@ const AVAILABLE_PORTALS = [
     description: 'Portal berita Antara News Kalimantan Barat'
   },
   {
+    name: 'Tribun Pontianak',
+    url: 'https://pontianak.tribunnews.com/index-news/kalbar',
+    description: 'Portal berita Tribun Pontianak'
+  },
+  {
     name: 'Suara Kalbar',
     url: 'https://www.suarakalbar.co.id/category/kalbar/',
     description: 'Portal berita daerah Suara Kalbar'

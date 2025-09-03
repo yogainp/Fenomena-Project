@@ -40,11 +40,36 @@ const INDONESIAN_MONTHS: { [key: string]: number } = {
   'agu': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'des': 11
 };
 
-// Enhanced Indonesian date parsing function
+// Helper function to create date consistently in Indonesia timezone
+function createIndonesianDate(year?: number, month?: number, day?: number): Date {
+  if (year && month !== undefined && day) {
+    // Create date for specific year/month/day
+    // Use UTC to avoid local timezone interference, then adjust
+    const utcDate = new Date(Date.UTC(year, month, day, 7, 0, 0)); // 7 AM UTC = 2 PM Indonesia (UTC+7)
+    return utcDate;
+  } else {
+    // Current date in Indonesia timezone
+    const now = new Date();
+    const indonesianNow = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // Add UTC+7
+    return new Date(Date.UTC(indonesianNow.getFullYear(), indonesianNow.getMonth(), indonesianNow.getDate(), 7, 0, 0));
+  }
+}
+
+// Helper function to format date for debugging
+function formatIndonesianDate(date: Date): string {
+  return date.toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
+
+// Enhanced Indonesian date parsing function with timezone fix
 function parseIndonesianDate(dateString: string): Date {
   if (!dateString) {
     console.log('[CHROMIUM] No date string provided, using current date');
-    return new Date();
+    return createIndonesianDate();
   }
   
   console.log(`[CHROMIUM] === PARSING DATE: "${dateString}" ===`);
@@ -56,7 +81,9 @@ function parseIndonesianDate(dateString: string): Date {
     .replace(/^\s*(,|\-|\||–|—)\s*/g, '')
     .replace(/\s+(WIB|WITA|WIT|GMT|UTC|\+\d{2}:\d{2}).*$/i, '')
     .replace(/\s+pukul\s+\d{1,2}[:.].\d{2}.*$/i, '')
+    .replace(/\s+\|\s+\d{1,2}[:.]\d{2}.*$/i, '') // Remove " | HH:MM" pattern specific for Pontianak Post
     .replace(/\s+\d{1,2}[:.].\d{2}([:.].\d{2})?.*$/i, '')
+    .replace(/^(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu),?\s*/i, '') // Remove day names
     .trim();
   
   console.log(`[CHROMIUM] Cleaned date: "${cleanedDate}"`);
@@ -67,20 +94,22 @@ function parseIndonesianDate(dateString: string): Date {
       console.log(`[CHROMIUM] Detected ISO format: ${cleanedDate}`);
       const isoDate = new Date(cleanedDate);
       if (!isNaN(isoDate.getTime())) {
-        console.log(`[CHROMIUM] ✅ Successfully parsed ISO date: ${isoDate.toISOString()}`);
-        return isoDate;
+        // Force to Indonesia timezone date only (no time component)
+        const dateOnly = createIndonesianDate(isoDate.getFullYear(), isoDate.getMonth(), isoDate.getDate());
+        console.log(`[CHROMIUM] ✅ Successfully parsed ISO date: ${dateOnly.toISOString()}`);
+        return dateOnly;
       }
     }
     
-    // Enhanced patterns including DD/MM/YYYY format
+    // FIXED: Reorder patterns for better matching - prioritize Indonesian format
     const patterns = [
-      // DD/MM/YYYY or DD-MM-YYYY (most common for Kalbar Online)
-      /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/,
-      // ISO format: YYYY-MM-DD
-      /(\d{4})-(\d{1,2})-(\d{1,2})$/,
-      // DD Month YYYY format
-      /(\d{1,2})\s+(\w+)\s+(\d{4})/i,
-      // Long format with day name
+      // 1. DD Month YYYY format (e.g., "2 September 2025") - HIGHEST PRIORITY for Indonesian
+      /^(\d{1,2})\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|sep|okt|nov|des)\s+(\d{4})$/i,
+      // 2. ISO format: YYYY-MM-DD
+      /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
+      // 3. DD/MM/YYYY or DD-MM-YYYY (CAUTION: ambiguous pattern)
+      /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/,
+      // 4. Long format with day name (fallback)
       /\w+,?\s+(\d{1,2})\s+(\w+)\s+(\d{4})/i,
     ];
     
@@ -90,26 +119,52 @@ function parseIndonesianDate(dateString: string): Date {
       
       if (match) {
         console.log(`[CHROMIUM] Matched pattern ${i + 1}: ${pattern}`);
+        console.log(`[CHROMIUM] Match groups:`, match.slice(1));
         
         let day: number, month: number, year: number;
         
         if (i === 0) {
-          // DD/MM/YYYY format - most common for Kalbar Online
-          day = parseInt(match[1]);
-          month = parseInt(match[2]) - 1; // Convert to 0-based month
-          year = parseInt(match[3]);
-          console.log(`[CHROMIUM] Detected DD/MM/YYYY format: ${day}/${month + 1}/${year}`);
-        } else if (i === 1) {
-          // YYYY-MM-DD format
-          year = parseInt(match[1]);
-          month = parseInt(match[2]) - 1;
-          day = parseInt(match[3]);
-        } else if (i === 2 || i === 3) {
-          // DD Month YYYY format
+          // DD Month YYYY format (Indonesian) - HIGHEST PRIORITY
           day = parseInt(match[1]);
           const monthName = match[2].toLowerCase();
           month = INDONESIAN_MONTHS[monthName];
           year = parseInt(match[3]);
+          console.log(`[CHROMIUM] 🇮🇩 Detected DD Month YYYY format: ${day} ${monthName} ${year} (month index: ${month})`);
+        } else if (i === 1) {
+          // YYYY-MM-DD format
+          year = parseInt(match[1]);
+          month = parseInt(match[2]) - 1; // Convert to 0-based month
+          day = parseInt(match[3]);
+          console.log(`[CHROMIUM] Detected YYYY-MM-DD format: ${year}-${month + 1}-${day}`);
+        } else if (i === 2) {
+          // DD/MM/YYYY format - CAUTION: Could be DD/MM or MM/DD
+          // Assume DD/MM for Indonesian context but add validation
+          const num1 = parseInt(match[1]);
+          const num2 = parseInt(match[2]);
+          
+          // Validate: if first number > 12, it's definitely day
+          // if second number > 12, it's definitely month
+          if (num1 > 12) {
+            day = num1;
+            month = num2 - 1;
+          } else if (num2 > 12) {
+            day = num2;
+            month = num1 - 1;
+          } else {
+            // Both are <= 12, assume DD/MM format for Indonesian context
+            day = num1;
+            month = num2 - 1;
+            console.log(`[CHROMIUM] ⚠️ Ambiguous DD/MM format, assuming DD/MM: ${day}/${month + 1}`);
+          }
+          year = parseInt(match[3]);
+          console.log(`[CHROMIUM] Detected DD/MM/YYYY format: ${day}/${month + 1}/${year}`);
+        } else if (i === 3) {
+          // Long format with day name (fallback)
+          day = parseInt(match[1]);
+          const monthName = match[2].toLowerCase();
+          month = INDONESIAN_MONTHS[monthName];
+          year = parseInt(match[3]);
+          console.log(`[CHROMIUM] Detected Long format: ${day} ${monthName} ${year}`);
         } else {
           continue;
         }
@@ -119,8 +174,9 @@ function parseIndonesianDate(dateString: string): Date {
             !isNaN(day) && day >= 1 && day <= 31 &&
             !isNaN(year) && year >= 2020 && year <= 2030) {
           
-          const parsedDate = new Date(year, month, day);
-          console.log(`[CHROMIUM] ✅ Successfully parsed: ${parsedDate.toISOString()}`);
+          // FIXED: Create date in Indonesia timezone consistently
+          const parsedDate = createIndonesianDate(year, month, day);
+          console.log(`[CHROMIUM] ✅ Successfully parsed: ${parsedDate.toISOString()} (Indonesia: ${formatIndonesianDate(parsedDate)})`);
           return parsedDate;
         } else {
           console.log(`[CHROMIUM] ❌ Invalid parsed values: day=${day}, month=${month}, year=${year}`);
@@ -134,9 +190,9 @@ function parseIndonesianDate(dateString: string): Date {
     console.error('[CHROMIUM] Error in date parsing:', error);
   }
   
-  // Fallback to current date
+  // Fallback to current date in Indonesia timezone
   console.log('[CHROMIUM] ⚠️ Using current date as fallback');
-  return new Date();
+  return createIndonesianDate();
 }
 
 // Helper function to clean text content
