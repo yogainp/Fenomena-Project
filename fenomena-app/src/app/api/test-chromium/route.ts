@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeNewsFromPortal } from '@/lib/scraping-service';
+import { scrapeKalbarOnlineWithChromium } from '@/lib/chromium-scraping-service';
 
 // GET /api/test-chromium - Test Chromium scraping for Kalbar Online
 export async function GET(request: NextRequest) {
@@ -8,14 +8,15 @@ export async function GET(request: NextRequest) {
     
     const options = {
       portalUrl: 'https://kalbaronline.com/berita-daerah/',
-      maxPages: 2, // This will translate to 1 View More click (2-1)
+      maxViewMoreClicks: 1, // 1 View More click to test pagination
+      keywords: [], // Will be fetched from database
       delayMs: 2000
     };
     
     console.log('[TEST] Test configuration:', options);
     
     const startTime = Date.now();
-    const result = await scrapeNewsFromPortal(options);
+    const result = await scrapeKalbarOnlineWithChromium(options);
     const endTime = Date.now();
     const duration = endTime - startTime;
     

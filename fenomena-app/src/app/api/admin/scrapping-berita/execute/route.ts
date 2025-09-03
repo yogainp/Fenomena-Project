@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { requireRole } from '@/lib/middleware';
-import { scrapeNewsFromPortal } from '@/lib/scraping-service';
+// Import chromium scraping functions directly
+import { 
+  scrapeKalbarOnlineWithChromium, 
+  scrapePontianakPostWithChromium, 
+  scrapeTribunPontianakWithChromium, 
+  scrapeKalbarAntaranewsWithChromium,
+  scrapeSuaraKalbarWithChromium
+} from '@/lib/chromium-scraping-service';
 import { z } from 'zod';
 
-// Allowed portals
+// Allowed portals (All use Chromium browser automation)
 const ALLOWED_PORTALS = [
   'https://pontianakpost.jawapos.com/daerah',
   'https://kalbaronline.com/berita-daerah/',
   'https://kalbar.antaranews.com/kalbar',
-  'https://www.suarakalbar.co.id/category/kalbar/',
-  'https://pontianak.tribunnews.com/index-news/kalbar'
+  'https://pontianak.tribunnews.com/index-news/kalbar',
+  'https://www.suarakalbar.co.id/category/kalbar/'
 ];
 
 const executeScrapingSchema = z.object({
@@ -22,7 +29,7 @@ const executeScrapingSchema = z.object({
   ),
   maxPages: z.number().min(1).max(200).optional().default(10),
   delayMs: z.number().min(1000).max(10000).optional().default(2000),
-  scrapingEngine: z.enum(['axios', 'chromium']).optional().default('axios'),
+  // Removed scrapingEngine - always use Chromium now
 });
 
 // POST /api/admin/scrapping-berita/execute - Execute scraping process
@@ -40,95 +47,74 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { portalUrl, maxPages, delayMs, scrapingEngine } = validationResult.data;
+    const { portalUrl, maxPages, delayMs } = validationResult.data;
 
-    // Validate chromium usage
-    if (scrapingEngine === 'chromium') {
-      // Check if portal is supported for Chromium scraping
-      const isKalbarOnline = portalUrl.includes('kalbaronline.com');
-      const isPontianakPost = portalUrl.includes('pontianakpost.jawapos.com');
-      const isTribunPontianak = portalUrl.includes('pontianak.tribunnews.com');
-      
-      if (!isKalbarOnline && !isPontianakPost && !isTribunPontianak) {
-        return NextResponse.json({
-          error: 'Chromium scraping is currently only supported for Kalbar Online, Pontianak Post, and Tribun Pontianak',
-          details: 'Please use Axios scraping for other portals.',
-        }, { status: 400 });
-      }
-      
-      console.log(`[API] 🚀 Chromium scraping enabled for ${portalUrl} (Environment: ${process.env.NODE_ENV || 'unknown'})`);
-    }
+    console.log(`[API] 🚀 Using Chromium scraping for ${portalUrl} (Environment: ${process.env.NODE_ENV || 'unknown'})`);
 
     let scrapingResult;
     
     try {
-      // Execute scraping based on engine
-      if (scrapingEngine === 'chromium') {
-        console.log(`[API] Using Chromium scraping for ${portalUrl}`);
-        
-        try {
-          // Dynamic import to avoid bundling chromium dependencies in production
-          const chromiumService = await import('@/lib/chromium-scraping-service');
-          
-          // Route to appropriate scraping function based on portal
-          if (portalUrl.includes('kalbaronline.com')) {
-            scrapingResult = await chromiumService.scrapeKalbarOnlineWithChromium({
-              portalUrl,
-              maxViewMoreClicks: Math.max(0, maxPages - 1),
-              keywords: [], // Will be fetched from database
-              delayMs,
-            });
-          } else if (portalUrl.includes('pontianakpost.jawapos.com')) {
-            console.log('[API] Executing Pontianak Post Chromium scraping...');
-            scrapingResult = await chromiumService.scrapePontianakPostWithChromium({
-              portalUrl,
-              maxPages,
-              keywords: [], // Will be fetched from database
-              delayMs,
-            });
-            console.log('[API] Pontianak Post scraping completed:', {
-              success: scrapingResult?.success,
-              totalScraped: scrapingResult?.totalScraped,
-              newItems: scrapingResult?.newItems,
-              errors: scrapingResult?.errors?.length || 0
-            });
-          } else if (portalUrl.includes('pontianak.tribunnews.com')) {
-            console.log('[API] Executing Tribun Pontianak Chromium scraping...');
-            scrapingResult = await chromiumService.scrapeTribunPontianakWithChromium({
-              portalUrl,
-              maxPages,
-              keywords: [], // Will be fetched from database
-              delayMs,
-            });
-            console.log('[API] Tribun Pontianak scraping completed:', {
-              success: scrapingResult?.success,
-              totalScraped: scrapingResult?.totalScraped,
-              newItems: scrapingResult?.newItems,
-              errors: scrapingResult?.errors?.length || 0
-            });
-          }
-        } catch (dynamicImportError: any) {
-          console.error('[API] Failed to load chromium scraping service:', dynamicImportError);
-          return NextResponse.json({
-            error: 'Chromium scraping service unavailable',
-            details: 'Failed to load chromium dependencies. This usually happens in production environments where puppeteer is not available.',
-            suggestion: 'Use Axios scraping instead, or ensure you are running in development mode with puppeteer installed.',
-          }, { status: 503 });
-        }
-      } else {
-        console.log(`[API] Using Axios scraping for ${portalUrl}`);
-        scrapingResult = await scrapeNewsFromPortal({
+      // Route to appropriate chromium scraping function based on portal
+      if (portalUrl.includes('kalbaronline.com')) {
+        console.log('[API] Executing Kalbar Online Chromium scraping...');
+        scrapingResult = await scrapeKalbarOnlineWithChromium({
           portalUrl,
-          maxPages,
+          maxViewMoreClicks: Math.max(0, maxPages - 1),
+          keywords: [], // Will be fetched from database
           delayMs,
         });
+      } else if (portalUrl.includes('pontianakpost.jawapos.com')) {
+        console.log('[API] Executing Pontianak Post Chromium scraping...');
+        scrapingResult = await scrapePontianakPostWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('pontianak.tribunnews.com')) {
+        console.log('[API] Executing Tribun Pontianak Chromium scraping...');
+        scrapingResult = await scrapeTribunPontianakWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('kalbar.antaranews.com')) {
+        console.log('[API] Executing Antara News Kalbar Chromium scraping...');
+        scrapingResult = await scrapeKalbarAntaranewsWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('suarakalbar.co.id')) {
+        console.log('[API] Executing Suara Kalbar Chromium scraping...');
+        scrapingResult = await scrapeSuaraKalbarWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else {
+        return NextResponse.json({
+          error: 'Unsupported portal',
+          details: `Portal ${portalUrl} is not supported for Chromium scraping.`,
+        }, { status: 400 });
       }
+
+      console.log('[API] Chromium scraping completed:', {
+        success: scrapingResult?.success,
+        totalScraped: scrapingResult?.totalScraped,
+        newItems: scrapingResult?.newItems,
+        errors: scrapingResult?.errors?.length || 0
+      });
+
     } catch (executionError: any) {
       // Handle execution errors
-      console.error('[API] Scraping execution error:', executionError);
+      console.error('[API] Chromium scraping execution error:', executionError);
       return NextResponse.json({
-        error: 'Scraping execution failed',
-        details: executionError.message || 'An error occurred during scraping execution.',
+        error: 'Chromium scraping execution failed',
+        details: executionError.message || 'An error occurred during chromium scraping execution.',
       }, { status: 500 });
     }
 

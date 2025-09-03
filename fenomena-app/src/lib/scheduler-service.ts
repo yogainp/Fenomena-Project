@@ -1,7 +1,14 @@
 import * as cron from 'node-cron';
 import CronExpressionParser from 'cron-parser';
 import { supabase } from '@/lib/supabase';
-import { scrapeNewsFromPortal } from '@/lib/scraping-service';
+// Import chromium scraping functions directly
+import { 
+  scrapeKalbarOnlineWithChromium, 
+  scrapePontianakPostWithChromium, 
+  scrapeTribunPontianakWithChromium, 
+  scrapeKalbarAntaranewsWithChromium,
+  scrapeSuaraKalbarWithChromium
+} from '@/lib/chromium-scraping-service';
 
 // Helper function to get current time in Indonesia timezone
 function getCurrentIndonesiaTime(): Date {
@@ -158,14 +165,59 @@ class SchedulerService {
         console.error('Failed to update schedule run times:', updateError);
       }
 
-      // Execute scraping using existing service
-      console.log(`🔍 Starting scraping for "${(schedule as any).name}" from ${(schedule as any).portalUrl}`);
+      // Execute scraping using chromium service
+      console.log(`🔍 Starting chromium scraping for "${(schedule as any).name}" from ${(schedule as any).portalUrl}`);
       
-      const scrapingResult = await scrapeNewsFromPortal({
-        portalUrl: (schedule as any).portalUrl,
-        maxPages: (schedule as any).maxPages,
-        delayMs: (schedule as any).delayMs
-      });
+      const portalUrl = (schedule as any).portalUrl;
+      const maxPages = (schedule as any).maxPages;
+      const delayMs = (schedule as any).delayMs;
+      
+      let scrapingResult;
+      
+      // Route to appropriate chromium scraping function based on portal
+      if (portalUrl.includes('kalbaronline.com')) {
+        console.log('[SCHEDULER] Executing Kalbar Online Chromium scraping...');
+        scrapingResult = await scrapeKalbarOnlineWithChromium({
+          portalUrl,
+          maxViewMoreClicks: Math.max(0, maxPages - 1),
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('pontianakpost.jawapos.com')) {
+        console.log('[SCHEDULER] Executing Pontianak Post Chromium scraping...');
+        scrapingResult = await scrapePontianakPostWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('pontianak.tribunnews.com')) {
+        console.log('[SCHEDULER] Executing Tribun Pontianak Chromium scraping...');
+        scrapingResult = await scrapeTribunPontianakWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('kalbar.antaranews.com')) {
+        console.log('[SCHEDULER] Executing Antara News Kalbar Chromium scraping...');
+        scrapingResult = await scrapeKalbarAntaranewsWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else if (portalUrl.includes('suarakalbar.co.id')) {
+        console.log('[SCHEDULER] Executing Suara Kalbar Chromium scraping...');
+        scrapingResult = await scrapeSuaraKalbarWithChromium({
+          portalUrl,
+          maxPages,
+          keywords: [], // Will be fetched from database
+          delayMs,
+        });
+      } else {
+        throw new Error(`Unsupported portal for chromium scraping: ${portalUrl}`);
+      }
 
       console.log(`✅ Scheduled scraping completed for "${(schedule as any).name}":`, {
         totalScraped: scrapingResult.totalScraped,
@@ -503,27 +555,32 @@ class SchedulerService {
 // Singleton instance
 export const schedulerService = new SchedulerService();
 
-// Available portal options (same as existing system)
+// Available portal options (All use Chromium browser automation)
 export const AVAILABLE_PORTALS = [
   {
     name: 'Pontianak Post',
     url: 'https://pontianakpost.jawapos.com/daerah',
-    description: 'Portal berita daerah Pontianak Post'
+    description: 'Portal berita daerah Pontianak Post - Browser Automation'
   },
   {
     name: 'Kalbar Online', 
     url: 'https://kalbaronline.com/berita-daerah/',
-    description: 'Portal berita daerah Kalbar Online'
+    description: 'Portal berita daerah Kalbar Online - Browser Automation'
   },
   {
     name: 'Antara News Kalbar',
     url: 'https://kalbar.antaranews.com/kalbar',
-    description: 'Portal berita Antara News Kalimantan Barat'
+    description: 'Portal berita Antara News Kalimantan Barat - Browser Automation'
+  },
+  {
+    name: 'Tribun Pontianak',
+    url: 'https://pontianak.tribunnews.com/index-news/kalbar',
+    description: 'Portal berita Tribun Pontianak - Browser Automation'
   },
   {
     name: 'Suara Kalbar',
     url: 'https://www.suarakalbar.co.id/category/kalbar/',
-    description: 'Portal berita daerah Suara Kalbar'
+    description: 'Portal berita daerah Suara Kalbar - Browser Automation'
   }
 ];
 
