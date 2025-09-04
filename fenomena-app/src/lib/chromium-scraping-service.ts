@@ -80,10 +80,10 @@ function parseIndonesianDate(dateString: string): Date {
     .replace(/^\s*(pada|on|at|di|dalam)[\s:]+/i, '')
     .replace(/^\s*(,|\-|\||–|—)\s*/g, '')
     .replace(/\s+(WIB|WITA|WIT|GMT|UTC|\+\d{2}:\d{2}).*$/i, '')
-    .replace(/\s+pukul\s+\d{1,2}[:.].\d{2}.*$/i, '')
+    .replace(/\s+pukul\s+\d{1,2}[:.]\d{2}.*$/i, '') // Fixed: removed extra dot
     .replace(/\s+\|\s+\d{1,2}[:.]\d{2}.*$/i, '') // Remove " | HH:MM" pattern specific for Pontianak Post
-    .replace(/\s+\d{1,2}[:.].\d{2}([:.].\d{2})?.*$/i, '')
-    .replace(/^(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu),?\s*/i, '') // Remove day names
+    .replace(/\s+\d{1,2}[:.]\d{2}([:.]\d{2})?.*$/i, '') // Fixed: removed extra dot, fixed grouping
+    .replace(/^(Senin|Selasa|Rabu|Kamis|Jumat|Sabtu|Minggu|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*/i, '') // Remove day names (Indonesian & English)
     .trim();
   
   console.log(`[CHROMIUM] Cleaned date: "${cleanedDate}"`);
@@ -376,9 +376,9 @@ export async function scrapeKalbarOnlineWithChromium(options: ChromiumScrapingOp
     
     const page = await browser.newPage();
     
-    // Vercel Free Plan: 10 second timeout limit protection
+    // Environment-aware timeout protection
     const startTime = Date.now();
-    const VERCEL_FREE_TIMEOUT = 8000; // 8 seconds to leave buffer
+    const VERCEL_FREE_TIMEOUT = isDevelopment ? 300000 : 8000; // 5 minutes for dev, 8 seconds for production
     
     // Set user agent and headers
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
@@ -416,18 +416,60 @@ export async function scrapeKalbarOnlineWithChromium(options: ChromiumScrapingOp
         // Check timeout for Vercel Free Plan
         const elapsedTime = Date.now() - startTime;
         if (elapsedTime > VERCEL_FREE_TIMEOUT) {
-          console.log(`[CHROMIUM] ⏰ Timeout approaching (${elapsedTime}ms), stopping to avoid Vercel limit`);
+          const environment = isDevelopment ? 'development' : 'production';
+          console.log(`[CHROMIUM] ⏰ Timeout limit reached (${elapsedTime}ms) in ${environment} mode, stopping`);
           break;
         }
         
         console.log(`[CHROMIUM] Attempting View More click ${clickCount + 1}/${maxViewMoreClicks} (elapsed: ${elapsedTime}ms)`);
         
-        // Wait for the View More button and click it
-        const viewMoreButton = await page.$('#main > div.text-center.gmr-newinfinite > p > button, .view-more-button, button[class*="more"], button[class*="load"]');
+        // Try each selector individually for better debugging
+        const selectors = [
+          '#main > div:nth-child(3) > p > button',  // Primary - from XPath
+          '#main > div.text-center.gmr-newinfinite > p > button',  // Fallback - old selector
+          '.view-more-button', 
+          'button[class*="more"]', 
+          'button[class*="load"]'
+        ];
+        
+        let viewMoreButton = null;
+        let usedSelector = '';
+        
+        for (const selector of selectors) {
+          viewMoreButton = await page.$(selector);
+          if (viewMoreButton) {
+            usedSelector = selector;
+            console.log(`[CHROMIUM] ✅ View More button found using selector: ${selector}`);
+            break;
+          } else {
+            console.log(`[CHROMIUM] ❌ View More button not found with selector: ${selector}`);
+          }
+        }
         
         if (!viewMoreButton) {
-          console.log('[CHROMIUM] View More button not found, stopping...');
-          break;
+          console.log(`[CHROMIUM] ❌ View More button not found with any selector on click ${clickCount + 1}/${maxViewMoreClicks}`);
+          // Additional debugging: log the current page structure around #main
+          try {
+            const debugInfo = await page.evaluate(() => {
+              const main = document.querySelector('#main');
+              if (main) {
+                return {
+                  childrenCount: main.children.length,
+                  childrenClasses: Array.from(main.children).map((child, index) => 
+                    `div[${index + 1}]: ${child.className || 'no-class'} - ${child.tagName}`
+                  ).join(', '),
+                  hasButtons: main.querySelectorAll('button').length
+                };
+              }
+              return { error: '#main not found' };
+            });
+            console.log(`[CHROMIUM] 🔍 DEBUG - #main structure:`, debugInfo);
+          } catch (debugError) {
+            console.log(`[CHROMIUM] Could not debug page structure:`, debugError);
+          }
+          // Continue to next iteration instead of breaking - maybe button appears later
+          console.log(`[CHROMIUM] ⚠️ Continuing to next View More attempt (${clickCount + 1})...`);
+          continue;
         }
         
         // Check if button is visible and enabled
@@ -467,8 +509,9 @@ export async function scrapeKalbarOnlineWithChromium(options: ChromiumScrapingOp
         
       } catch (clickError) {
         console.error(`[CHROMIUM] Error during View More click ${clickCount + 1}:`, clickError);
-        // Don't break, try to continue with existing articles
-        break;
+        // Continue with next click attempt instead of breaking
+        console.log(`[CHROMIUM] ⚠️ Continuing to next View More attempt...`);
+        continue;
       }
     }
     
@@ -583,25 +626,75 @@ async function scrapeCurrentArticles(
           await articlePage.goto(article.link, { waitUntil: 'networkidle0', timeout: 15000 });
           
           content = await articlePage.evaluate(() => {
+            // PERBAIKAN KALBAR ONLINE: Ekstraksi konten yang lebih bersih
             const contentSelectors = ['.entry-content', '.post-content', '.article-content', '.content', 'main'];
             
             for (const selector of contentSelectors) {
               const contentElement = document.querySelector(selector);
-              if (contentElement && contentElement.textContent) {
-                const text = contentElement.textContent.replace(/\s+/g, ' ').trim();
-                if (text.length > 100) {
-                  return text;
+              if (contentElement) {
+                // Hapus elemen yang tidak diinginkan
+                const unwantedSelectors = [
+                  'script', 'style', 'noscript', 'iframe',
+                  '.advertisement', '.ads', '.ad', '[class*="ad-"]', '[id*="ad-"]',
+                  '.social-share', '.sharing', '.share-buttons',
+                  '.related-posts', '.related-articles',
+                  '.comments', '.comment-form',
+                  '.navigation', '.nav-links',
+                  '.widget', '.sidebar'
+                ];
+                
+                // Clone element untuk tidak mengubah DOM asli
+                const clonedElement = contentElement.cloneNode(true) as Element;
+                
+                // Hapus elemen yang tidak diinginkan
+                unwantedSelectors.forEach(unwantedSelector => {
+                  const unwantedElements = clonedElement.querySelectorAll(unwantedSelector);
+                  unwantedElements.forEach(el => el.remove());
+                });
+                
+                // Ambil hanya paragraf dan teks yang meaningful
+                const paragraphs = Array.from(clonedElement.querySelectorAll('p, div.wp-block-text'))
+                  .map(p => p.textContent?.trim())
+                  .filter(text => {
+                    if (!text || text.length < 15) return false; // Turunkan minimum dari 20 ke 15
+                    // Filter out text yang terlihat seperti metadata atau CSS
+                    if (text.match(/^\s*(font-|color:|background:|margin:|padding:|width:|height:)/i)) return false;
+                    if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                    if (text.match(/window\.|document\.|jquery|^\s*\{|\}\s*$/i)) return false;
+                    // Jangan filter out paragraf pendek yang mungkin penting di akhir artikel
+                    return true;
+                  })
+                  .slice(0, 25); // Perbesar limit dari 15 ke 25 paragraf
+                
+                if (paragraphs.length > 0) {
+                  const cleanText = paragraphs.join(' ')
+                    .replace(/\s+/g, ' ')
+                    .replace(/\n+/g, ' ')
+                    .trim();
+                  
+                  if (cleanText.length > 100) {
+                    return cleanText;
+                  }
                 }
               }
             }
             
-            // Fallback to paragraph content
-            const paragraphs = Array.from(document.querySelectorAll('p'))
+            // Fallback: ambil semua paragraf dari body dengan filtering ketat
+            const allParagraphs = Array.from(document.querySelectorAll('p'))
               .map(p => p.textContent?.trim())
-              .filter(text => text && text.length > 20)
+              .filter(text => {
+                if (!text || text.length < 15) return false; // Turunkan minimum
+                // Filter out CSS, JavaScript, dan metadata
+                if (text.match(/^\s*(font-|color:|background:|margin:|padding:|width:|height:)/i)) return false;
+                if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                if (text.match(/window\.|document\.|jquery|^\s*\{|\}\s*$|adsbygoogle/i)) return false;
+                if (text.match(/^\s*(share|follow|subscribe|newsletter)/i)) return false;
+                return true;
+              })
+              .slice(0, 20) // Perbesar limit dari 10 ke 20 paragraf
               .join(' ');
             
-            return paragraphs || '';
+            return allParagraphs || '';
           });
           
           await articlePage.close();
@@ -1244,29 +1337,126 @@ export async function scrapeTribunPontianakWithChromium(options: TribunPontianak
               const articleResponse = await page.goto(article.link, { timeout: 15000 });
               if (articleResponse?.ok()) {
                 content = await page.evaluate(() => {
-                  // Common selectors for article content in Tribun sites
+                  // PERBAIKAN TRIBUN PONTIANAK: Ekstraksi konten yang lebih spesifik
                   const selectors = [
-                    '.txt-article p',
-                    '.artikel p',
-                    '.content p',
-                    '.article-content p', 
-                    '.entry-content p',
-                    'article p',
-                    '.post-content p',
-                    'p'
+                    '.txt-article',          // Main article content container
+                    '.artikel',              // Article content
+                    '.content',              // Generic content
+                    '.article-content',      // Article content
+                    '.entry-content',        // Entry content
+                    'article',               // HTML5 article tag
+                    '.post-content'          // Post content
                   ];
                   
                   for (const selector of selectors) {
-                    const elements = document.querySelectorAll(selector);
-                    if (elements.length > 0) {
-                      return Array.from(elements)
-                        .map(el => el.textContent?.trim())
-                        .filter(text => text && text.length > 20)
-                        .slice(0, 5) // First 5 paragraphs
-                        .join(' ');
+                    const contentElement = document.querySelector(selector);
+                    if (contentElement) {
+                      // Clone element untuk tidak mengubah DOM asli
+                      const clonedElement = contentElement.cloneNode(true) as Element;
+                      
+                      // Hapus elemen yang tidak diinginkan khusus untuk Tribun
+                      const unwantedSelectors = [
+                        'script', 'style', 'noscript', 'iframe',
+                        '.advertisement', '.ads', '.ad', '[class*="ad-"]', '[id*="ad-"]',
+                        '.social-share', '.sharing', '.share-buttons',
+                        '.related-posts', '.related-articles', '.berita-terkait', '.artikel-terkait',
+                        '.comments', '.comment-form', '.disqus-comments',
+                        '.navigation', '.nav-links', '.breadcrumb',
+                        '.widget', '.sidebar', '.footer',
+                        '.tags', '.tag-list', '.kategori',
+                        // Khusus untuk Tribun - elemen yang sering mengandung judul berita lain
+                        '.box-most-populer', '.most-popular',
+                        '.box-latest-news', '.latest-news',
+                        '.trending', '.viral',
+                        '.recommendation', '.rekomendasi',
+                        '[class*="headline"]', '[class*="breaking"]',
+                        // Elemen navigasi berita lain
+                        '.previous-next-news', '.prev-next',
+                        '.other-news', '.berita-lainnya'
+                      ];
+                      
+                      // Hapus elemen yang tidak diinginkan
+                      unwantedSelectors.forEach(unwantedSelector => {
+                        const unwantedElements = clonedElement.querySelectorAll(unwantedSelector);
+                        unwantedElements.forEach(el => el.remove());
+                      });
+                      
+                      // Ambil paragraf dengan filtering ketat untuk Tribun
+                      const paragraphs = Array.from(clonedElement.querySelectorAll('p'))
+                        .map(p => p.textContent?.trim())
+                        .filter(text => {
+                          if (!text || text.length < 20) return false;
+                          
+                          // Filter out JavaScript dan CSS
+                          if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                          if (text.match(/^\s*\{|\}\s*$/i)) return false;
+                          if (text.match(/^\s*(font-|color:|background:|margin:|padding:|width:|height:)/i)) return false;
+                          
+                          // Filter out metadata dan navigasi
+                          if (text.match(/^\s*(baca juga|berita terkait|trending|viral|populer):/i)) return false;
+                          if (text.match(/^\s*(reporter|editor|photographer|sumber|foto):/i)) return false;
+                          if (text.match(/^\s*(share|bagikan|follow|ikuti|subscribe)/i)) return false;
+                          
+                          // Filter out judul berita lain yang sering masuk - ciri khas Tribun
+                          if (text.match(/^\s*\d+\.\s*.{10,100}$/)) return false; // Format "1. Judul Berita"
+                          if (text.match(/^(BREAKING NEWS|TRIBUNPONTIANAK\.COM)/i)) return false;
+                          if (text.match(/^(Baca:|Simak:|Lihat:|Selengkapnya:)/i)) return false;
+                          
+                          // Filter out promosi Google News dan WhatsApp khusus Tribun
+                          if (text.match(/Baca\s+Berita\s+Terbaru\s+Lainnya\s+di\s+GOOGLE\s+NEWS/i)) return false;
+                          if (text.match(/Dapatkan\s+Berita\s+Viral\s+Via\s+Saluran\s+WhatsApp/i)) return false;
+                          if (text.match(/GOOGLE\s+NEWS/i)) return false;
+                          
+                          // Filter out teks yang terlihat seperti judul berita terpisah
+                          const words = text.split(/\s+/);
+                          if (words.length < 8 && text.match(/[A-Z][a-z]*(\s+[A-Z][a-z]*)*/)) {
+                            // Kemungkinan judul berita jika terlalu pendek dan mengandung kapitalisasi
+                            return false;
+                          }
+                          
+                          return true;
+                        })
+                        .slice(0, 12); // Ambil maksimal 12 paragraf untuk artikel lengkap
+                      
+                      if (paragraphs.length > 0) {
+                        let cleanText = paragraphs.join(' ')
+                          .replace(/\s+/g, ' ')
+                          .replace(/\n+/g, ' ')
+                          .trim();
+                        
+                        // Post-processing untuk membersihkan sisa-sisa navigasi dan promosi
+                        cleanText = cleanText.replace(/\s*(BACA JUGA|BERITA TERKAIT|TRENDING|VIRAL):.*/gi, '');
+                        cleanText = cleanText.replace(/\s*(Selengkapnya|Baca|Simak|Lihat):.*/gi, '');
+                        // Khusus untuk Tribun - hapus promosi Google News dan WhatsApp
+                        cleanText = cleanText.replace(/\s*Baca\s+Berita\s+Terbaru\s+Lainnya\s+di\s+GOOGLE\s+NEWS.*/gi, '');
+                        cleanText = cleanText.replace(/\s*Dapatkan\s+Berita\s+Viral\s+Via\s+Saluran\s+WhatsApp.*/gi, '');
+                        cleanText = cleanText.replace(/\s*GOOGLE\s+NEWS.*/gi, '');
+                        
+                        // Trim whitespace berlebih
+                        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+                        
+                        if (cleanText.length > 100) {
+                          return cleanText;
+                        }
+                      }
                     }
                   }
-                  return '';
+                  
+                  // Fallback dengan filtering yang sama
+                  const allParagraphs = Array.from(document.querySelectorAll('p'))
+                    .map(p => p.textContent?.trim())
+                    .filter(text => {
+                      if (!text || text.length < 20) return false;
+                      // Apply same filters as above
+                      if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                      if (text.match(/^\s*(baca juga|berita terkait|trending|viral):/i)) return false;
+                      if (text.match(/^\s*\d+\.\s*.{10,100}$/)) return false;
+                      return true;
+                    })
+                    .slice(0, 8)
+                    .join(' ');
+                  
+                  return allParagraphs.replace(/\s+/g, ' ').trim();
                 });
               }
             } catch (contentError) {
@@ -1505,19 +1695,60 @@ export async function scrapeKalbarAntaranewsWithChromium(options: KalbarAntarane
     const processedUrls = new Set<string>();
     const processedTitles = new Set<string>();
     
-    // Scrape multiple pages
+    // Load initial page first
+    console.log(`[CHROMIUM-KA] 📄 Loading initial page: ${portalUrl}`);
+    await page.goto(portalUrl, { 
+      waitUntil: 'networkidle2', 
+      timeout: 30000 
+    });
+    await delay(2000);
+
+    // Scrape multiple pages using click-based navigation
     for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
       try {
-        const pageUrl = currentPage === 1 ? portalUrl : `${portalUrl}?page=${currentPage}`;
-        console.log(`[CHROMIUM-KA] 📄 Scraping page ${currentPage}: ${pageUrl}`);
+        console.log(`[CHROMIUM-KA] 📄 Processing page ${currentPage}`);
         
-        await page.goto(pageUrl, { 
-          waitUntil: 'networkidle2', 
-          timeout: 30000 
-        });
-        
-        // Wait for content to load
-        await delay(2000);
+        // For page 2+, click pagination link instead of URL navigation
+        if (currentPage > 1) {
+          // NOTE: Based on your examples - page 2 = li:nth-child(2), page 3 = li:nth-child(3)
+          const nthChild = currentPage;  
+          const nextPageSelector = `#main-container > div.main-content.mag-content.clearfix > div > div.col-md-8 > div.post-content.clearfix > nav > ul > li:nth-child(${nthChild}) > a`;
+          console.log(`[CHROMIUM-KA] 🖱️ Trying to click pagination: li:nth-child(${nthChild}) for page ${currentPage}`);
+          
+          const nextPageLink = await page.$(nextPageSelector);
+          
+          if (!nextPageLink) {
+            console.log(`[CHROMIUM-KA] ❌ No pagination link found for page ${currentPage} (li:nth-child(${nthChild})), stopping`);
+            break;
+          }
+          
+          console.log(`[CHROMIUM-KA] ✅ Clicking pagination link for page ${currentPage}`);
+          
+          try {
+            // Click the pagination link and wait for navigation
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }),
+              nextPageLink.click()
+            ]);
+            
+            await delay(2000);
+            console.log(`[CHROMIUM-KA] ✅ Successfully navigated to page ${currentPage}`);
+            
+          } catch (navError) {
+            console.log(`[CHROMIUM-KA] ⚠️ Navigation error for page ${currentPage}:`, navError);
+            console.log(`[CHROMIUM-KA] ⚠️ Trying fallback approach...`);
+            
+            // Fallback: try clicking without waiting for navigation
+            try {
+              await nextPageLink.click();
+              await delay(3000); // Give more time for page load
+              console.log(`[CHROMIUM-KA] ✅ Fallback navigation to page ${currentPage} completed`);
+            } catch (fallbackError) {
+              console.log(`[CHROMIUM-KA] ❌ Fallback failed for page ${currentPage}, stopping pagination`);
+              break;
+            }
+          }
+        }
         
         // Extract articles using the correct XPath structure for Kalbar Antaranews
         const articles = await page.evaluate(() => {
@@ -1622,7 +1853,7 @@ export async function scrapeKalbarAntaranewsWithChromium(options: KalbarAntarane
               const articleResponse = await page.goto(article.link, { timeout: 15000 });
               if (articleResponse?.ok()) {
                 content = await page.evaluate(() => {
-                  // Common selectors for article content in Kalbar Antaranews
+                  // PERBAIKAN KALBAR ANTARANEWS: Filtering untuk script adsbygoogle dan elemen iklan
                   const selectors = [
                     '#print_content .artikel',
                     '#print_content',
@@ -1636,30 +1867,108 @@ export async function scrapeKalbarAntaranewsWithChromium(options: KalbarAntarane
                   for (const selector of selectors) {
                     const contentElement = document.querySelector(selector);
                     if (contentElement) {
-                      const paragraphs = contentElement.querySelectorAll('p');
+                      // Clone element untuk tidak mengubah DOM asli
+                      const clonedElement = contentElement.cloneNode(true) as Element;
+                      
+                      // Hapus elemen yang tidak diinginkan khusus untuk Antaranews
+                      const unwantedSelectors = [
+                        'script', 'style', 'noscript', 'iframe',
+                        '.advertisement', '.ads', '.ad', '[class*="ad-"]', '[id*="ad-"]',
+                        '.google-ad', '.adsbygoogle', '[data-ad-client]',
+                        '.social-share', '.sharing', '.share-buttons',
+                        '.related-posts', '.related-articles', '.berita-terkait',
+                        '.comments', '.comment-form', '.disqus',
+                        '.navigation', '.nav-links', '.breadcrumb',
+                        '.widget', '.sidebar', '.footer',
+                        '.copyright', '[class*="copyright"]'
+                      ];
+                      
+                      // Hapus elemen yang tidak diinginkan
+                      unwantedSelectors.forEach(unwantedSelector => {
+                        const unwantedElements = clonedElement.querySelectorAll(unwantedSelector);
+                        unwantedElements.forEach(el => el.remove());
+                      });
+                      
+                      // Ambil paragraf dengan filtering khusus untuk Antaranews
+                      const paragraphs = Array.from(clonedElement.querySelectorAll('p'))
+                        .map(p => p.textContent?.trim())
+                        .filter(text => {
+                          if (!text || text.length < 20) return false;
+                          
+                          // Filter out script adsbygoogle dan sejenisnya
+                          if (text.match(/adsbygoogle|googletag|window\.|document\./i)) return false;
+                          if (text.match(/\(adsbygoogle\s*=\s*window\.adsbygoogle\s*\|\|\s*\[\]\)\.push/i)) return false;
+                          if (text.match(/\.push\s*\(\s*\{\s*\}\s*\)/i)) return false;
+                          
+                          // Filter out JavaScript code
+                          if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                          if (text.match(/^\s*\{|\}\s*$/i)) return false;
+                          
+                          // Filter out CSS styles
+                          if (text.match(/^\s*(font-|color:|background:|margin:|padding:|width:|height:)/i)) return false;
+                          
+                          // Filter out metadata dan navigasi
+                          if (text.match(/^\s*(baca juga|sumber|editor|reporter|foto|video):/i)) return false;
+                          if (text.match(/^\s*(copyright|©|all rights reserved)/i)) return false;
+                          if (text.match(/^\s*(share|bagikan|follow|ikuti)/i)) return false;
+                          
+                          return true;
+                        })
+                        .slice(0, 15); // Ambil maksimal 15 paragraf
+                      
                       if (paragraphs.length > 0) {
-                        return Array.from(paragraphs)
-                          .map(p => p.textContent?.trim())
-                          .filter(text => text && text.length > 20)
-                          .slice(0, 10) // First 10 paragraphs
-                          .join(' ');
+                        let cleanText = paragraphs.join(' ')
+                          .replace(/\s+/g, ' ')
+                          .replace(/\n+/g, ' ')
+                          .trim();
+                        
+                        // Clean up script adsbygoogle yang mungkin masih tersisa dalam text
+                        cleanText = cleanText.replace(/\(adsbygoogle\s*=\s*window\.adsbygoogle\s*\|\|\s*\[\]\)\.push\s*\(\s*\{\s*\}\s*\);?/gi, '');
+                        cleanText = cleanText.replace(/window\.adsbygoogle[^;]*;?/gi, '');
+                        cleanText = cleanText.replace(/googletag[^;]*;?/gi, '');
+                        
+                        // Clean up extra whitespace setelah cleaning
+                        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+                        
+                        if (cleanText.length > 100) {
+                          return cleanText;
+                        }
                       }
                       
-                      // Fallback to element text
-                      const text = contentElement.textContent?.trim();
+                      // Fallback: ambil text dari element langsung dengan cleaning
+                      const text = clonedElement.textContent?.trim();
                       if (text && text.length > 100) {
-                        return text;
+                        let cleanText = text
+                          .replace(/\(adsbygoogle\s*=\s*window\.adsbygoogle\s*\|\|\s*\[\]\)\.push\s*\(\s*\{\s*\}\s*\);?/gi, '')
+                          .replace(/window\.adsbygoogle[^;]*/gi, '')
+                          .replace(/googletag[^;]*/gi, '')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                        
+                        if (cleanText.length > 100) {
+                          return cleanText;
+                        }
                       }
                     }
                   }
                   
-                  // Last resort: get all paragraphs from body
-                  const allParagraphs = document.querySelectorAll('p');
-                  return Array.from(allParagraphs)
+                  // Last resort: get all paragraphs from body dengan filtering ketat
+                  const allParagraphs = Array.from(document.querySelectorAll('p'))
                     .map(p => p.textContent?.trim())
-                    .filter(text => text && text.length > 20)
-                    .slice(0, 5)
+                    .filter(text => {
+                      if (!text || text.length < 20) return false;
+                      // Filter out adsbygoogle dan script lainnya
+                      if (text.match(/adsbygoogle|googletag|window\.|document\./i)) return false;
+                      if (text.match(/\(adsbygoogle\s*=\s*window\.adsbygoogle\s*\|\|\s*\[\]\)\.push/i)) return false;
+                      return true;
+                    })
+                    .slice(0, 8)
                     .join(' ');
+                  
+                  // Clean final result
+                  return allParagraphs.replace(/\(adsbygoogle\s*=\s*window\.adsbygoogle\s*\|\|\s*\[\]\)\.push\s*\(\s*\{\s*\}\s*\);?/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
                 });
               }
             } catch (contentError) {
@@ -1721,28 +2030,8 @@ export async function scrapeKalbarAntaranewsWithChromium(options: KalbarAntarane
         
         result.totalScraped += articles.length;
         
-        // Check pagination using XPath: //*[@id="main-container"]/div[2]/div/div[1]/div[2]/nav/ul/li[3]/a
-        try {
-          const hasNextPage = await page.evaluate(() => {
-            // Look for pagination navigation
-            const paginationSelector = '#main-container > div:nth-child(2) > div > div:nth-child(1) > div:nth-child(2) > nav > ul';
-            const paginationList = document.querySelector(paginationSelector);
-            if (paginationList) {
-              // Look for next page link (usually the last link that's not disabled)
-              const nextLinks = paginationList.querySelectorAll('li > a[href*="page"]');
-              return nextLinks.length > 0; // If there are page links, assume there might be more pages
-            }
-            return false;
-          });
-          
-          if (!hasNextPage && currentPage >= maxPages) {
-            console.log(`[CHROMIUM-KA] 📄 No more pages available after page ${currentPage}`);
-            break;
-          }
-          
-        } catch (paginationError) {
-          console.log(`[CHROMIUM-KA] ⚠️ Could not check pagination, continuing...`);
-        }
+        // Pagination is now handled by click-based navigation above
+        // No need for separate pagination checking - the loop will continue until maxPages or no pagination link found
         
         // Add delay between pages
         if (currentPage < maxPages && delayMs > 0) {
@@ -2007,40 +2296,142 @@ export async function scrapeSuaraKalbarWithChromium(options: SuaraKalbarScraping
               const articleResponse = await page.goto(article.link, { timeout: 15000 });
               if (articleResponse?.ok()) {
                 content = await page.evaluate(() => {
+                  // PERBAIKAN SUARA KALBAR: Filtering teks promosi dan elemen tidak diinginkan
                   const selectors = [
                     '.entry-content',
                     '.post-content',
                     '.article-content',
                     '.content',
                     'article',
-                    '.single-content'
+                    '.single-content',
+                    '.ray-main-single-content' // Specific to Suara Kalbar theme
                   ];
                   
                   for (const selector of selectors) {
                     const contentElement = document.querySelector(selector);
                     if (contentElement) {
-                      const paragraphs = contentElement.querySelectorAll('p');
+                      // Clone element untuk tidak mengubah DOM asli
+                      const clonedElement = contentElement.cloneNode(true) as Element;
+                      
+                      // Hapus elemen yang tidak diinginkan khusus untuk Suara Kalbar
+                      const unwantedSelectors = [
+                        'script', 'style', 'noscript', 'iframe',
+                        '.advertisement', '.ads', '.ad', '[class*="ad-"]', '[id*="ad-"]',
+                        '.social-share', '.sharing', '.share-buttons',
+                        '.related-posts', '.related-articles', '.berita-terkait',
+                        '.comments', '.comment-form', '.disqus',
+                        '.navigation', '.nav-links', '.breadcrumb',
+                        '.widget', '.sidebar', '.footer',
+                        '.tags', '.tag-list', '.kategori',
+                        // Khusus untuk Suara Kalbar - elemen promosi
+                        '.google-news-follow', '.follow-google-news',
+                        '[class*="google-news"]', '[class*="follow"]',
+                        '.newsletter', '.subscription',
+                        '.author-box', '.penulis',
+                        '.metadata', '.post-meta',
+                        // Ray theme specific elements
+                        '.ray-widget-style-1-metadata',
+                        '.ray-single-related-posts'
+                      ];
+                      
+                      // Hapus elemen yang tidak diinginkan
+                      unwantedSelectors.forEach(unwantedSelector => {
+                        const unwantedElements = clonedElement.querySelectorAll(unwantedSelector);
+                        unwantedElements.forEach(el => el.remove());
+                      });
+                      
+                      // Ambil paragraf dengan filtering khusus untuk Suara Kalbar - LEBIH PERMISIF
+                      const paragraphs = Array.from(clonedElement.querySelectorAll('p'))
+                        .map(p => p.textContent?.trim())
+                        .filter(text => {
+                          if (!text || text.length < 10) return false; // Turunkan minimum dari 20 ke 10
+                          
+                          // Filter out JavaScript dan CSS
+                          if (text.match(/^\s*(function|var |const |let |if\s*\(|for\s*\()/i)) return false;
+                          if (text.match(/^\s*\{|\}\s*$/i)) return false;
+                          if (text.match(/^\s*(font-|color:|background:|margin:|padding:|width:|height:)/i)) return false;
+                          
+                          // Filter out teks promosi khas Suara Kalbar
+                          if (text.match(/IKUTI\s+BERITA\s+LAINNYA\s+DI\s+GOOGLE\s+NEWS/i)) return false;
+                          if (text.match(/FOLLOW\s+(US\s+)?ON\s+GOOGLE\s+NEWS/i)) return false;
+                          if (text.match(/IKUTI\s+KAMI\s+DI\s+GOOGLE\s+NEWS/i)) return false;
+                          if (text.match(/SUBSCRIBE\s+TO\s+OUR\s+GOOGLE\s+NEWS/i)) return false;
+                          
+                          // Filter out metadata dan navigasi - LEBIH SPESIFIK
+                          if (text.match(/^\s*(baca juga|sumber|editor|reporter|foto|video):\s/i)) return false; // Harus ada ":"
+                          if (text.match(/^\s*(share|bagikan|follow|ikuti|subscribe)$|^\s*(share|bagikan|follow|ikuti|subscribe)\s+[A-Z]/i)) return false; // Standalone atau diikuti kapital
+                          if (text.match(/^\s*(copyright|©|all rights reserved)/i)) return false;
+                          
+                          // Filter out author information - hanya jika di awal teks
+                          if (text.match(/^\s*Penulis:\s*/i)) return false;
+                          if (text.match(/^\s*Editor:\s*/i)) return false;
+                          if (text.match(/^\s*Reporter:\s*/i)) return false;
+                          
+                          // Jangan filter out paragraf yang mungkin berisi konten penting
+                          return true;
+                        })
+                        .slice(0, 30); // Perbesar limit dari 15 ke 30 paragraf
+                      
                       if (paragraphs.length > 0) {
-                        return Array.from(paragraphs)
-                          .map(p => p.textContent?.trim())
-                          .filter(text => text && text.length > 20)
-                          .slice(0, 10)
-                          .join(' ');
+                        let cleanText = paragraphs.join(' ')
+                          .replace(/\s+/g, ' ')
+                          .replace(/\n+/g, ' ')
+                          .trim();
+                        
+                        // Post-processing khusus Suara Kalbar - hapus teks promosi yang tersisa
+                        cleanText = cleanText.replace(/\s*IKUTI\s+BERITA\s+LAINNYA\s+DI\s+GOOGLE\s+NEWS.*/gi, '');
+                        cleanText = cleanText.replace(/\s*FOLLOW\s+(US\s+)?ON\s+GOOGLE\s+NEWS.*/gi, '');
+                        cleanText = cleanText.replace(/\s*IKUTI\s+KAMI\s+DI\s+GOOGLE\s+NEWS.*/gi, '');
+                        cleanText = cleanText.replace(/\s*SUBSCRIBE\s+TO\s+OUR\s+GOOGLE\s+NEWS.*/gi, '');
+                        
+                        // Hapus informasi penulis yang mungkin masih tersisa
+                        cleanText = cleanText.replace(/\s*Penulis:\s*[^\/]*\/r?\s*$/gi, '');
+                        cleanText = cleanText.replace(/\s*Editor:\s*[^\/]*\/r?\s*$/gi, '');
+                        cleanText = cleanText.replace(/\s*Reporter:\s*[^\/]*\/r?\s*$/gi, '');
+                        
+                        // Clean up extra whitespace
+                        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+                        
+                        if (cleanText.length > 100) {
+                          return cleanText;
+                        }
                       }
                       
-                      const text = contentElement.textContent?.trim();
+                      // Fallback: ambil text dari element langsung dengan cleaning
+                      const text = clonedElement.textContent?.trim();
                       if (text && text.length > 100) {
-                        return text;
+                        let cleanText = text
+                          .replace(/\s*IKUTI\s+BERITA\s+LAINNYA\s+DI\s+GOOGLE\s+NEWS.*/gi, '')
+                          .replace(/\s*FOLLOW\s+(US\s+)?ON\s+GOOGLE\s+NEWS.*/gi, '')
+                          .replace(/\s*Penulis:\s*[^\/]*\/r?\s*$/gi, '')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                        
+                        if (cleanText.length > 100) {
+                          return cleanText;
+                        }
                       }
                     }
                   }
                   
-                  const allParagraphs = document.querySelectorAll('p');
-                  return Array.from(allParagraphs)
+                  // Last resort dengan filtering yang sama - LEBIH PERMISIF
+                  const allParagraphs = Array.from(document.querySelectorAll('p'))
                     .map(p => p.textContent?.trim())
-                    .filter(text => text && text.length > 20)
-                    .slice(0, 5)
+                    .filter(text => {
+                      if (!text || text.length < 10) return false; // Turunkan minimum dari 20 ke 10
+                      // Apply same filters as above
+                      if (text.match(/IKUTI\s+BERITA\s+LAINNYA\s+DI\s+GOOGLE\s+NEWS/i)) return false;
+                      if (text.match(/^\s*(penulis|editor|reporter):\s/i)) return false; // Harus ada ":"
+                      return true;
+                    })
+                    .slice(0, 25) // Perbesar limit dari 10 ke 25
                     .join(' ');
+                  
+                  // Final cleaning untuk hasil fallback
+                  return allParagraphs
+                    .replace(/\s*IKUTI\s+BERITA\s+LAINNYA\s+DI\s+GOOGLE\s+NEWS.*/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
                 });
               }
             } catch (contentError) {
